@@ -8,9 +8,9 @@ import (
 	"ToDo/services"
 	"encoding/json"
 	"fmt"
-	"github.com/gorilla/mux"
+	"github.com/gin-contrib/cors"
+	"github.com/gin-gonic/gin"
 	"github.com/jinzhu/gorm"
-	"github.com/rs/cors"
 	"log"
 	"net/http"
 )
@@ -66,56 +66,52 @@ func main() {
 	todoRepo = repositories.NewTodoRepository(db)
 	todoService = services.NewTodoService(todoRepo)
 
-	r := mux.NewRouter()
+	// 初始化 Gin 路由器
+	r := gin.Default()
 
+	// 使用日志中间件
 	r.Use(middlewares.LoggingMiddleware)
 
-	// CORS 中间件，允许前端访问后端 API
-	corsHandler := cors.New(cors.Options{
-		AllowedOrigins: []string{"*"},                             // 允许所有的域名进行访问
-		AllowedMethods: []string{"GET", "POST", "PUT", "DELETE"},  // 允许的请求方法
-		AllowedHeaders: []string{"Content-Type", "Authorization"}, // 允许的请求头
+	// CORS 配置
+	r.Use(cors.Default())
+	// 路由设置
+	r.POST("/auth/login", func(c *gin.Context) {
+		controllers.Login(c.Writer, c.Request, userService)
+	})
+	r.POST("/auth/register", func(c *gin.Context) {
+		emailService := services.NewEmailService()
+		controllers.Register(c.Writer, c.Request, userService, emailService)
 	})
 
-	// 路由设置
-	r.HandleFunc("/auth/login", func(w http.ResponseWriter, r *http.Request) {
-		controllers.Login(w, r, userService)
-	}).Methods("POST")
-	r.HandleFunc("/auth/register", func(w http.ResponseWriter, r *http.Request) {
-		emailService := services.NewEmailService()
-		controllers.Register(w, r, userService, emailService)
-	}).Methods("POST")
-
 	// Todo 路由
-	r.HandleFunc("/todo", func(w http.ResponseWriter, r *http.Request) {
-		controllers.CreateTodo(w, r, todoService)
-	}).Methods("POST")
-	r.HandleFunc("/todo/{id}", func(w http.ResponseWriter, r *http.Request) {
-		controllers.GetTodo(w, r, todoService)
-	}).Methods("GET")
-	r.HandleFunc("/todo/{id}", func(w http.ResponseWriter, r *http.Request) {
-		controllers.UpdateTodo(w, r, todoService)
-	}).Methods("PUT")
-	r.HandleFunc("/todo/{id}", func(w http.ResponseWriter, r *http.Request) {
-		controllers.DeleteTodo(w, r, todoService)
-	}).Methods("DELETE")
+	r.POST("/todo", func(c *gin.Context) {
+		controllers.CreateTodo(c.Writer, c.Request, todoService)
+	})
+	r.GET("/todo/:id", func(c *gin.Context) {
+		controllers.GetTodo(c.Writer, c.Request, todoService)
+	})
+	r.PUT("/todo/:id", func(c *gin.Context) {
+		controllers.UpdateTodo(c.Writer, c.Request, todoService)
+	})
+	r.DELETE("/todo/:id", func(c *gin.Context) {
+		controllers.DeleteTodo(c.Writer, c.Request, todoService)
+	})
 
 	// Checkin 路由
-	r.HandleFunc("/checkin", func(w http.ResponseWriter, r *http.Request) {
-		controllers.Checkin(w, r, checkinService)
-	}).Methods("POST")
+	r.POST("/checkin", func(c *gin.Context) {
+		controllers.Checkin(c.Writer, c.Request, checkinService)
+	})
 
 	// 社区动态路由
-	r.HandleFunc("/community/post", func(w http.ResponseWriter, r *http.Request) {
-		controllers.CreatePost(w, r, communityService)
-	}).Methods("POST")
-	r.HandleFunc("/community/list", func(w http.ResponseWriter, r *http.Request) {
-		controllers.GetPosts(w, r, communityService)
-	}).Methods("GET")
-	r.HandleFunc("/community/{post_id}/like", func(w http.ResponseWriter, r *http.Request) {
+	r.POST("/community/post", func(c *gin.Context) {
+		controllers.CreatePost(c.Writer, c.Request, communityService)
+	})
+	r.GET("/community/list", func(c *gin.Context) {
+		controllers.GetPosts(c.Writer, c.Request, communityService)
+	})
+	r.POST("/community/:post_id/like", func(c *gin.Context) {
 		// 提取 path 参数 (post_id)
-		vars := mux.Vars(r)
-		postID := vars["post_id"]
+		postID := c.Param("post_id")
 
 		// 解析请求体中的 UserID
 		var requestBody struct {
@@ -123,27 +119,26 @@ func main() {
 		}
 
 		// 解析请求体
-		if err := json.NewDecoder(r.Body).Decode(&requestBody); err != nil {
-			http.Error(w, "Invalid request body: "+err.Error(), http.StatusBadRequest)
+		if err := json.NewDecoder(c.Request.Body).Decode(&requestBody); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body: " + err.Error()})
 			return
 		}
 
 		// 校验 UserID 是否有效
 		if requestBody.UserID == "" {
-			http.Error(w, "UserID is required", http.StatusBadRequest)
+			c.JSON(http.StatusBadRequest, gin.H{"error": "UserID is required"})
 			return
 		}
 
 		// 调用 LikePost 控制器并传入 postID 和 UserID
-		controllers.LikePost(w, r, communityService, postID, requestBody.UserID)
-	}).Methods("POST")
+		controllers.LikePost(c.Writer, c.Request, communityService, postID, requestBody.UserID)
+	})
 
 	// 启动 HTTP 服务
 	fmt.Println("Server running on", config.ServerAddress)
 
-	// 使用 CORS 中间件
-	handler := corsHandler.Handler(r)
-
 	// 启动 HTTP 服务并监听端口
-	log.Fatal(http.ListenAndServe(config.ServerAddress, handler))
+	if err := r.Run(config.ServerAddress); err != nil {
+		log.Fatalf("Error starting the server: %v", err)
+	}
 }
