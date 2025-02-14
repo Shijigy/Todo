@@ -2,7 +2,6 @@ package config
 
 import (
 	_ "database/sql"
-	"fmt"
 	_ "github.com/go-sql-driver/mysql" // 导入 MySQL 驱动
 	"github.com/joho/godotenv"         // 用于加载 .env 文件
 	"log"
@@ -14,6 +13,7 @@ type AppConfig struct {
 	ServerAddress string
 	Database      DatabaseConfig
 	JWTSecretKey  string
+	Email         EmailConfig // 添加 Email 配置
 }
 
 // DatabaseConfig 数据库配置
@@ -23,6 +23,13 @@ type DatabaseConfig struct {
 	Username string
 	Password string
 	DbName   string
+}
+
+// EmailConfig 邮件配置
+type EmailConfig struct {
+	SMTPServer string
+	FromEmail  string
+	Password   string
 }
 
 // LoadConfig 从环境变量或配置文件加载配置
@@ -44,6 +51,11 @@ func LoadConfig() (*AppConfig, error) {
 			DbName:   getEnv("DB_NAME", "todo"),          // MySQL database name
 		},
 		JWTSecretKey: getEnv("JWT_SECRET_KEY", "defaultsecretkey"),
+		Email: EmailConfig{
+			SMTPServer: getEnv("SMTP_SERVER", "smtp.example.com"),
+			FromEmail:  getEnv("FROM_EMAIL", "noreply@example.com"),
+			Password:   getEnv("EMAIL_PASSWORD", "your_email_password"),
+		},
 	}
 
 	return config, nil
@@ -56,16 +68,4 @@ func getEnv(key, defaultValue string) string {
 		return defaultValue
 	}
 	return value
-}
-
-func main() {
-	// 加载配置
-	config, err := LoadConfig()
-	if err != nil {
-		log.Fatalf("Error loading configuration: %v", err)
-	}
-
-	// 输出加载的配置，或者将其传递给应用程序
-	fmt.Println("Server address:", config.ServerAddress)
-	fmt.Println("Database host:", config.Database.Host)
 }

@@ -11,37 +11,35 @@ import (
 
 // Register 注册新用户
 func Register(w http.ResponseWriter, r *http.Request, userService services.UserService, emailService services.EmailService) {
-	var user models.User
-	var captchaInput string
+	var req struct {
+		User         models.User `json:"user"`
+		CaptchaInput string      `json:"captchaInput"`
+	}
 
-	// 解析请求体
-	if err := json.NewDecoder(r.Body).Decode(&user); err != nil {
-		// 返回错误信息，格式化为 JSON
+	// 解码请求体
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(models.Response{Error: "Invalid input"})
 		return
 	}
 
-	// 从请求中获取验证码
-	if err := json.NewDecoder(r.Body).Decode(&captchaInput); err != nil {
-		// 返回错误信息，格式化为 JSON
+	// 检查邮箱是否已注册
+	existingUser, err := userService.GetUserByEmail(context.Background(), req.User.Email)
+	if err != nil {
 		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(models.Response{Error: "Invalid captcha"})
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(models.Response{Error: "Error checking email"})
 		return
 	}
-
-	// 校验邮箱是否已被注册
-	existingUser, err := userService.GetUserByEmail(context.Background(), user.Email)
-	if err == nil && existingUser != nil {
+	if existingUser != nil {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusConflict)
 		json.NewEncoder(w).Encode(models.Response{Error: "Email already registered"})
 		return
 	}
 
-	// 生成并发送验证码到用户邮箱
+	// 生成并发送验证码
 	captchaCode, err := utils.GenerateCaptcha()
 	if err != nil {
 		w.Header().Set("Content-Type", "application/json")
@@ -49,7 +47,7 @@ func Register(w http.ResponseWriter, r *http.Request, userService services.UserS
 		json.NewEncoder(w).Encode(models.Response{Error: "Error generating captcha"})
 		return
 	}
-	err = emailService.SendCaptcha(user.Email, captchaCode)
+	err = emailService.SendCaptcha(req.User.Email, captchaCode)
 	if err != nil {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusInternalServerError)
@@ -57,26 +55,26 @@ func Register(w http.ResponseWriter, r *http.Request, userService services.UserS
 		return
 	}
 
-	// 验证验证码是否正确
-	if captchaInput != captchaCode {
+	// 验证验证码
+	if req.CaptchaInput != captchaCode {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusForbidden)
 		json.NewEncoder(w).Encode(models.Response{Error: "Invalid captcha"})
 		return
 	}
 
-	// 加密密码
-	hashedPassword, err := utils.HashPassword(user.Password)
+	// 哈希密码
+	hashedPassword, err := utils.HashPassword(req.User.Password)
 	if err != nil {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusInternalServerError)
 		json.NewEncoder(w).Encode(models.Response{Error: "Error hashing password"})
 		return
 	}
-	user.Password = hashedPassword
+	req.User.Password = hashedPassword
 
-	// 调用用户服务注册用户
-	err = userService.RegisterUser(context.Background(), user)
+	// 注册用户
+	err = userService.RegisterUser(context.Background(), req.User)
 	if err != nil {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusInternalServerError)
@@ -84,8 +82,8 @@ func Register(w http.ResponseWriter, r *http.Request, userService services.UserS
 		return
 	}
 
-	// 生成 JWT Token
-	token, err := utils.GenerateJWTToken(&user)
+	// 生成 JWT token
+	token, err := utils.GenerateJWTToken(&req.User)
 	if err != nil {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusInternalServerError)
@@ -93,10 +91,11 @@ func Register(w http.ResponseWriter, r *http.Request, userService services.UserS
 		return
 	}
 
-	// 返回注册成功的信息和 JWT Token
+	// 返回成功信息和 token
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
 	json.NewEncoder(w).Encode(models.Response{
+		Status:  "success",
 		Message: "User registered successfully",
 		Token:   token,
 	})

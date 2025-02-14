@@ -6,4 +6,5 @@ type Response struct {
 	Data    interface{} `json:"data,omitempty"`  // 可选的数据
 	Error   string      `json:"error,omitempty"` // 可选的错误信息
 	Token   string      `json:"token,omitempty"` // 可选的 Token，注册成功时返回
+	Status  string      `json:"status"`
 }

@@ -11,94 +11,68 @@ import (
 
 // Register 注册新用户
 func Register(w http.ResponseWriter, r *http.Request, userService services.UserService, emailService services.EmailService) {
-	var user models.User
-	var captchaInput string
-
-	// 解析请求体
-	if err := json.NewDecoder(r.Body).Decode(&user); err != nil {
-		// 返回错误信息，格式化为 JSON
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(models.Response{Error: "Invalid input"})
-		return
+	var request struct {
+		User        models.User `json:"user"`
+		CaptchaCode string      `json:"captcha"`
 	}
 
-	// 从请求中获取验证码
-	if err := json.NewDecoder(r.Body).Decode(&captchaInput); err != nil {
-		// 返回错误信息，格式化为 JSON
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(models.Response{Error: "Invalid captcha"})
+	// 解析请求体
+	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+		respondWithError(w, http.StatusBadRequest, "Invalid input")
 		return
 	}
 
 	// 校验邮箱是否已被注册
-	existingUser, err := userService.GetUserByEmail(context.Background(), user.Email)
+	existingUser, err := userService.GetUserByEmail(context.Background(), request.User.Email)
 	if err == nil && existingUser != nil {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusConflict)
-		json.NewEncoder(w).Encode(models.Response{Error: "Email already registered"})
+		respondWithError(w, http.StatusConflict, "Email already registered")
 		return
 	}
 
 	// 生成并发送验证码到用户邮箱
 	captchaCode, err := utils.GenerateCaptcha()
 	if err != nil {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusInternalServerError)
-		json.NewEncoder(w).Encode(models.Response{Error: "Error generating captcha"})
+		respondWithError(w, http.StatusInternalServerError, "Error generating captcha")
 		return
 	}
-	err = emailService.SendCaptcha(user.Email, captchaCode)
+	err = emailService.SendCaptcha(request.User.Email, captchaCode)
 	if err != nil {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusInternalServerError)
-		json.NewEncoder(w).Encode(models.Response{Error: "Error sending captcha"})
+		respondWithError(w, http.StatusInternalServerError, "Error sending captcha")
 		return
 	}
 
 	// 验证验证码是否正确
-	if captchaInput != captchaCode {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusForbidden)
-		json.NewEncoder(w).Encode(models.Response{Error: "Invalid captcha"})
+	if request.CaptchaCode != captchaCode {
+		respondWithError(w, http.StatusForbidden, "Invalid captcha")
 		return
 	}
 
 	// 加密密码
-	hashedPassword, err := utils.HashPassword(user.Password)
+	hashedPassword, err := utils.HashPassword(request.User.Password)
 	if err != nil {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusInternalServerError)
-		json.NewEncoder(w).Encode(models.Response{Error: "Error hashing password"})
+		respondWithError(w, http.StatusInternalServerError, "Error hashing password")
 		return
 	}
-	user.Password = hashedPassword
+	request.User.Password = hashedPassword
 
 	// 调用用户服务注册用户
-	err = userService.RegisterUser(context.Background(), user)
+	err = userService.RegisterUser(context.Background(), request.User)
 	if err != nil {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusInternalServerError)
-		json.NewEncoder(w).Encode(models.Response{Error: err.Error()})
+		respondWithError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 
 	// 生成 JWT Token
-	token, err := utils.GenerateJWTToken(&user)
+	token, err := utils.GenerateJWTToken(&request.User)
 	if err != nil {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusInternalServerError)
-		json.NewEncoder(w).Encode(models.Response{Error: "Error generating JWT"})
+		respondWithError(w, http.StatusInternalServerError, "Error generating JWT")
 		return
 	}
 
 	// 返回注册成功的信息和 JWT Token
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(models.Response{
-		Message: "User registered successfully",
-		Token:   token,
+	respondWithJSON(w, http.StatusCreated, map[string]interface{}{
+		"message": "User registered successfully",
+		"token":   token,
 	})
 }
 
@@ -111,10 +85,7 @@ func Login(w http.ResponseWriter, r *http.Request, userService services.UserServ
 
 	// 解析请求体
 	if err := json.NewDecoder(r.Body).Decode(&loginReq); err != nil {
-		// 返回错误信息，格式化为 JSON
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(models.Response{Error: "Invalid input"})
+		respondWithError(w, http.StatusBadRequest, "Invalid input")
 		return
 	}
 
@@ -122,15 +93,27 @@ func Login(w http.ResponseWriter, r *http.Request, userService services.UserServ
 	ctx := context.Background()
 	token, err := userService.LoginUser(ctx, loginReq.Username, loginReq.Password)
 	if err != nil {
-		// 返回错误信息，格式化为 JSON
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusUnauthorized)
-		json.NewEncoder(w).Encode(models.Response{Error: err.Error()})
+		respondWithError(w, http.StatusUnauthorized, err.Error())
 		return
 	}
 
 	// 返回生成的 JWT Token
+	respondWithJSON(w, http.StatusOK, map[string]interface{}{
+		"message": "Login successful",
+		"token":   token,
+	})
+}
+
+// 封装的错误响应函数
+func respondWithError(w http.ResponseWriter, statusCode int, message string) {
 	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(models.Response{Message: "Login successful", Data: map[string]string{"token": token}})
+	w.WriteHeader(statusCode)
+	json.NewEncoder(w).Encode(models.Response{Error: message})
+}
+
+// 封装的成功响应函数
+func respondWithJSON(w http.ResponseWriter, statusCode int, payload interface{}) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(statusCode)
+	json.NewEncoder(w).Encode(payload)
 }

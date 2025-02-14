@@ -4,6 +4,7 @@ import (
 	"ToDo/config"
 	"ToDo/controllers"
 	"ToDo/middlewares"
+	"ToDo/models"
 	"ToDo/repositories"
 	"ToDo/services"
 	"fmt"
@@ -11,6 +12,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/jinzhu/gorm"
 	"log"
+	"net/http"
 )
 
 var db *gorm.DB
@@ -23,6 +25,7 @@ var communityService services.CommunityService
 var todoRepo repositories.TodoRepository
 var todoService services.TodoService
 var likeRepo repositories.LikeRepository // 确保声明 likeRepo
+var emailService services.EmailService   // 声明 emailService
 
 // 启动入口
 func main() {
@@ -53,7 +56,8 @@ func main() {
 
 	// 初始化各个仓库和服务
 	userRepo = repositories.NewUserRepository(db)
-	userService = services.NewUserService(userRepo)
+	emailService = services.NewEmailService(config.Email.SMTPServer, config.Email.FromEmail, config.Email.Password)
+	userService = services.NewUserService(userRepo, emailService)
 	checkinRepo = repositories.NewCheckinRepository(db)
 	checkinService = services.NewCheckinService(checkinRepo)
 
@@ -75,7 +79,23 @@ func main() {
 	// CORS 配置
 	r.Use(cors.Default())
 
-	// 路由设置
+	r.POST("/auth/register", func(c *gin.Context) {
+		// 解析请求体
+		var req struct {
+			User         models.User `json:"user"`
+			CaptchaInput string      `json:"captchaInput"`
+		}
+
+		// 绑定请求体中的 JSON 数据到 req 结构体
+		if err := c.ShouldBindJSON(&req); err != nil {
+			c.JSON(http.StatusBadRequest, models.Response{Error: "Invalid input"})
+			return
+		}
+
+		// 继续调用原来的 Register 函数，适配 c.Writer 和 c.Request
+		controllers.Register(c.Writer, c.Request, userService, emailService)
+	})
+
 	r.POST("/auth/login", func(c *gin.Context) {
 		controllers.Login(c.Writer, c.Request, userService)
 	})
