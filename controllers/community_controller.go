@@ -69,10 +69,49 @@ func GetPosts(w http.ResponseWriter, r *http.Request, service services.Community
 	json.NewEncoder(w).Encode(models.Response{Message: "Posts retrieved successfully", Data: posts})
 }
 
+// DeletePost 删除社区动态
+func DeletePost(w http.ResponseWriter, r *http.Request, service services.CommunityService) {
+	// 获取动态 ID
+	id := r.URL.Query().Get("id")
+	if id == "" {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(models.Response{Error: "Post ID is required"})
+		return
+	}
+
+	// 调用服务层删除社区动态
+	err := service.DeleteCommunityPostService(r.Context(), id, service.Repo)
+	if err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(models.Response{Error: err.Error()})
+		return
+	}
+
+	// 成功删除社区动态，返回 200 状态码
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(models.Response{Message: "Post deleted successfully"})
+}
+
 // LikePost 点赞社区动态
-func LikePost(w http.ResponseWriter, r *http.Request, service services.CommunityService, postID string, userID string) {
+func LikePost(w http.ResponseWriter, r *http.Request, service services.CommunityService) {
+	var requestBody struct {
+		UserID string `json:"user_id"`
+		PostID string `json:"post_id"`
+	}
+
+	// 解析请求体中的数据
+	if err := json.NewDecoder(r.Body).Decode(&requestBody); err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(models.Response{Error: "Invalid input"})
+		return
+	}
+
 	// 校验 UserID 和 PostID 是否有效
-	if userID == "" || postID == "" {
+	if requestBody.UserID == "" || requestBody.PostID == "" {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(models.Response{Error: "UserID and PostID are required"})
@@ -80,8 +119,7 @@ func LikePost(w http.ResponseWriter, r *http.Request, service services.Community
 	}
 
 	// 调用服务层的 LikePostService 处理点赞逻辑
-	ctx := r.Context() // 获取上下文
-	err := service.LikePostService(ctx, userID, postID)
+	err := service.LikePostService(r.Context(), requestBody.UserID, requestBody.PostID)
 	if err != nil {
 		// 如果出错，返回错误信息
 		w.Header().Set("Content-Type", "application/json")
@@ -90,4 +128,74 @@ func LikePost(w http.ResponseWriter, r *http.Request, service services.Community
 		return
 	}
 
+	// 成功处理点赞
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(models.Response{Message: "Post liked successfully"})
+}
+
+// CancelLikePost 取消点赞社区动态
+func CancelLikePost(w http.ResponseWriter, r *http.Request, service services.CommunityService) {
+	var requestBody struct {
+		UserID string `json:"user_id"`
+		PostID string `json:"post_id"`
+	}
+
+	// 解析请求体中的数据
+	if err := json.NewDecoder(r.Body).Decode(&requestBody); err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(models.Response{Error: "Invalid input"})
+		return
+	}
+
+	// 校验 UserID 和 PostID 是否有效
+	if requestBody.UserID == "" || requestBody.PostID == "" {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(models.Response{Error: "UserID and PostID are required"})
+		return
+	}
+
+	// 调用服务层的 CancelLikePostService 处理取消点赞逻辑
+	err := service.CancelLikePostService(r.Context(), requestBody.UserID, requestBody.PostID)
+	if err != nil {
+		// 如果出错，返回错误信息
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(models.Response{Error: err.Error()})
+		return
+	}
+
+	// 成功处理取消点赞
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(models.Response{Message: "Post unliked successfully"})
+}
+
+// GetLikesCount 获取特定帖子的点赞数
+func GetLikesCount(w http.ResponseWriter, r *http.Request, service services.CommunityService) {
+	postID := r.URL.Query().Get("post_id")
+
+	// 校验 PostID 是否有效
+	if postID == "" {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(models.Response{Error: "PostID is required"})
+		return
+	}
+
+	// 调用服务层的 GetLikesCountService 获取点赞数
+	likesCount, err := service.GetLikesCountService(r.Context(), postID)
+	if err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(models.Response{Error: err.Error()})
+		return
+	}
+
+	// 成功返回点赞数
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(models.Response{Message: "Likes count retrieved successfully", Data: map[string]int{"likes_count": likesCount}})
 }

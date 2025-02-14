@@ -6,13 +6,11 @@ import (
 	"ToDo/middlewares"
 	"ToDo/repositories"
 	"ToDo/services"
-	"encoding/json"
 	"fmt"
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 	"github.com/jinzhu/gorm"
 	"log"
-	"net/http"
 )
 
 var db *gorm.DB
@@ -24,6 +22,7 @@ var communityRepo repositories.CommunityRepository
 var communityService services.CommunityService
 var todoRepo repositories.TodoRepository
 var todoService services.TodoService
+var likeRepo repositories.LikeRepository // 确保声明 likeRepo
 
 // 启动入口
 func main() {
@@ -58,9 +57,10 @@ func main() {
 	checkinRepo = repositories.NewCheckinRepository(db)
 	checkinService = services.NewCheckinService(checkinRepo)
 
-	// 初始化社区仓库和服务
+	// 初始化服务
 	communityRepo = repositories.NewCommunityRepository(db)
-	communityService = services.NewCommunityService(communityRepo)
+	likeRepo = repositories.NewLikeRepository(db)
+	communityService = services.NewCommunityService(communityRepo, likeRepo)
 
 	// 初始化待办任务仓库和服务
 	todoRepo = repositories.NewTodoRepository(db)
@@ -74,13 +74,10 @@ func main() {
 
 	// CORS 配置
 	r.Use(cors.Default())
+
 	// 路由设置
 	r.POST("/auth/login", func(c *gin.Context) {
 		controllers.Login(c.Writer, c.Request, userService)
-	})
-	r.POST("/auth/register", func(c *gin.Context) {
-		emailService := services.NewEmailService()
-		controllers.Register(c.Writer, c.Request, userService, emailService)
 	})
 
 	// Todo 路由
@@ -109,29 +106,17 @@ func main() {
 	r.GET("/community/list", func(c *gin.Context) {
 		controllers.GetPosts(c.Writer, c.Request, communityService)
 	})
-	r.POST("/community/:post_id/like", func(c *gin.Context) {
-		// 提取 path 参数 (post_id)
-		postID := c.Param("post_id")
-
-		// 解析请求体中的 UserID
-		var requestBody struct {
-			UserID string `json:"user_id"` // 修改字段为小写 user_id
-		}
-
-		// 解析请求体
-		if err := json.NewDecoder(c.Request.Body).Decode(&requestBody); err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body: " + err.Error()})
-			return
-		}
-
-		// 校验 UserID 是否有效
-		if requestBody.UserID == "" {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "UserID is required"})
-			return
-		}
-
-		// 调用 LikePost 控制器并传入 postID 和 UserID
-		controllers.LikePost(c.Writer, c.Request, communityService, postID, requestBody.UserID)
+	r.DELETE("/community/post", func(c *gin.Context) {
+		controllers.DeletePost(c.Writer, c.Request, communityService)
+	})
+	r.POST("/community/like", func(c *gin.Context) {
+		controllers.LikePost(c.Writer, c.Request, communityService)
+	})
+	r.DELETE("/community/unlike", func(c *gin.Context) {
+		controllers.CancelLikePost(c.Writer, c.Request, communityService)
+	})
+	r.GET("/community/post/likes", func(c *gin.Context) {
+		controllers.GetLikesCount(c.Writer, c.Request, communityService)
 	})
 
 	// 启动 HTTP 服务

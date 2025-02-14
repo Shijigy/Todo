@@ -15,7 +15,9 @@ type CommunityRepository interface {
 	GetAllPosts(ctx context.Context) ([]models.CommunityPost, error)
 	GetFilteredPosts(ctx context.Context, tags, userID, sort string, offset, limit int) ([]models.CommunityPost, error)
 	IncrementLikesCount(ctx context.Context, postID string) error
+	DecrementLikesCount(ctx context.Context, postID string) error
 	DeletePost(ctx context.Context, id string) error
+	GetLikesCount(ctx context.Context, postID string) (int, error)
 }
 
 // 社区仓库实现
@@ -26,6 +28,23 @@ type communityRepository struct {
 // NewCommunityRepository 创建社区仓库实例
 func NewCommunityRepository(db *gorm.DB) CommunityRepository {
 	return &communityRepository{db: db}
+}
+
+// LikeRepository 点赞仓库接口
+type LikeRepository interface {
+	AddLike(ctx context.Context, userID, postID string) error
+	CheckLikeExist(ctx context.Context, userID, postID string) (bool, error)
+	RemoveLike(ctx context.Context, userID, postID string) error
+}
+
+// Like 仓库实现
+type likeRepository struct {
+	db *gorm.DB
+}
+
+// NewLikeRepository 创建点赞仓库实例
+func NewLikeRepository(db *gorm.DB) LikeRepository {
+	return &likeRepository{db: db}
 }
 
 // CreatePost 创建社区动态
@@ -106,22 +125,6 @@ func (r *communityRepository) IncrementLikesCount(ctx context.Context, postID st
 	return nil
 }
 
-// LikeRepository 点赞仓库接口
-type LikeRepository interface {
-	AddLike(ctx context.Context, userID, postID string) error
-	CheckLikeExist(ctx context.Context, userID, postID string) (bool, error)
-}
-
-// Like 仓库实现
-type likeRepository struct {
-	db *gorm.DB
-}
-
-// NewLikeRepository 创建点赞仓库实例
-func NewLikeRepository(db *gorm.DB) LikeRepository {
-	return &likeRepository{db: db}
-}
-
 // AddLike 添加点赞记录
 func (r *likeRepository) AddLike(ctx context.Context, userID, postID string) error {
 	like := models.Like{
@@ -143,4 +146,34 @@ func (r *likeRepository) CheckLikeExist(ctx context.Context, userID, postID stri
 		return false, err
 	}
 	return err == nil, nil
+}
+
+// DecrementLikesCount 减少社区动态的点赞数
+func (r *communityRepository) DecrementLikesCount(ctx context.Context, postID string) error {
+	var post models.CommunityPost
+	err := r.db.Model(&post).Where("id = ?", postID).UpdateColumn("likes_count", gorm.Expr("likes_count - ?", 1)).Error
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+// RemoveLike 删除用户对帖子点赞记录
+func (r *likeRepository) RemoveLike(ctx context.Context, userID, postID string) error {
+	// 使用GORM删除对应的点赞记录
+	err := r.db.Where("user_id = ? AND post_id = ?", userID, postID).Delete(&models.Like{}).Error
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+// GetLikesCount 获取特定帖子点赞数
+func (r *communityRepository) GetLikesCount(ctx context.Context, postID string) (int, error) {
+	var count int
+	err := r.db.Model(&models.Like{}).Where("post_id = ?", postID).Count(&count).Error
+	if err != nil {
+		return 0, err
+	}
+	return count, nil
 }
