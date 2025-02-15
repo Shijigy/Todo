@@ -4,7 +4,6 @@ import (
 	"ToDo/models"
 	"fmt"
 	"github.com/golang-jwt/jwt/v4"
-	"math/rand"
 	"time"
 )
 
@@ -60,12 +59,4 @@ func ValidateJWTToken(tokenString string) (string, error) {
 
 	// 返回用户名
 	return claims.Username, nil
-}
-
-// GenerateCaptcha 生成验证码
-func GenerateCaptcha() (string, error) {
-	// 生成随机验证码
-	rand.Seed(time.Now().UnixNano())
-	code := rand.Intn(999999-100000) + 100000 // 6位数字验证码
-	return fmt.Sprintf("%d", code), nil
 }

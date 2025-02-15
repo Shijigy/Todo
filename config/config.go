@@ -53,8 +53,8 @@ func LoadConfig() (*AppConfig, error) {
 		JWTSecretKey: getEnv("JWT_SECRET_KEY", "defaultsecretkey"),
 		Email: EmailConfig{
 			SMTPServer: getEnv("SMTP_SERVER", "smtp.example.com"),
-			FromEmail:  getEnv("FROM_EMAIL", "noreply@example.com"),
-			Password:   getEnv("EMAIL_PASSWORD", "your_email_password"),
+			FromEmail:  getEnv("FROM_EMAIL", "15691925305@163.com"),
+			Password:   getEnv("EMAIL_PASSWORD", "Shang6688."),
 		},
 	}
 
