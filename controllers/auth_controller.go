@@ -82,6 +82,9 @@ func SendEmailRegister(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "无效的请求数据"})
 		return
 	}
+	fmt.Println("======================================================")
+	fmt.Println(requestData)
+	fmt.Println("======================================================")
 	// 调用UserRegister函数进行注册
 	result := services.SendEmail(requestData.Email, sessionID, false)
 
