@@ -18,6 +18,7 @@ func InitMySQL() (err error) {
 	if err != nil {
 		return fmt.Errorf("无法连接数据库: %v", err)
 	}
+
 	// 测试数据库连接
 	if err := DB.DB().Ping(); err != nil {
 		return fmt.Errorf("数据库连接测试失败: %v", err)
@@ -28,6 +29,9 @@ func InitMySQL() (err error) {
 // Close 关闭数据库连接
 func Close() {
 	if DB != nil {
-		DB.Close()
+		sqlDB := DB.DB()
+		if sqlDB != nil {
+			sqlDB.Close()
+		}
 	}
 }

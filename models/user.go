@@ -3,6 +3,7 @@ package models
 import (
 	"ToDo/dao"
 	"fmt"
+	"github.com/jinzhu/gorm"
 	"time"
 )
 
@@ -20,12 +21,14 @@ type User struct {
 /*
 	User这个Model的增删改查操作都放在这里
 */
-// CreateATodo 创建user
+
+// CreateAUser 创建user
 func CreateAUser(user *User) (err error) {
 	err = dao.DB.Table("users").Create(&user).Error
 	return
 }
 
+// GetAllUser 获取所有用户
 func GetAllUser() (userList []*User, err error) {
 	if err = dao.DB.Table("users").Find(&userList).Error; err != nil {
 		return nil, err
@@ -33,33 +36,40 @@ func GetAllUser() (userList []*User, err error) {
 	return
 }
 
+// FindAUserByName 根据用户名查询用户
 func FindAUserByName(username string) (user *User, err error) {
 	user = new(User)
 	if err = dao.DB.Debug().Table("users").Where("username=?", username).First(user).Error; err != nil {
+		if gorm.IsRecordNotFoundError(err) {
+			return nil, fmt.Errorf("user not found with username: %s", username)
+		}
 		return nil, err
 	}
 	return
 }
+
+// FindAUserByEmail 根据邮箱查询用户
 func FindAUserByEmail(email string) (user *User, err error) {
 	user = new(User)
 	if err = dao.DB.Debug().Table("users").Where("email=?", email).First(user).Error; err != nil {
+		if gorm.IsRecordNotFoundError(err) {
+			return nil, fmt.Errorf("user not found with email: %s", email)
+		}
 		return nil, err
 	}
 	return
 }
+
+// UpdateUserPasswordByEmail 根据邮箱更新用户密码
 func UpdateUserPasswordByEmail(email string, password string) error {
 	err := dao.DB.Table("users").Where("email = ?", email).Update("password", password).Error
-	user := new(User)
-	if err = dao.DB.Debug().Table("users").Where("email=?", email).First(&user).Error; err != nil {
-
-	}
-	fmt.Println(666)
-	fmt.Println(user.Username)
 	if err != nil {
 		return err
 	}
 	return nil
 }
+
+// UpdateUserStatus 根据邮箱更新用户状态
 func UpdateUserStatus(email string, status int) error {
 	err := dao.DB.Table("users").Where("email = ?", email).Update("status", status).Error
 	if err != nil {
@@ -67,13 +77,19 @@ func UpdateUserStatus(email string, status int) error {
 	}
 	return nil
 }
+
+// DeleteATodo 根据ID删除用户
 func DeleteATodo(id string) (err error) {
 	err = dao.DB.Table("users").Where("id=?", id).Delete(&User{}).Error
 	return
 }
+
+// GetStatusByEmail 根据邮箱获取用户状态
 func GetStatusByEmail(email string) (int, string) {
 	user := new(User)
-	dao.DB.Debug().Table("users").Where("email=?", email).First(&user)
-	//fmt.Println(user.Status)
+	err := dao.DB.Debug().Table("users").Where("email=?", email).First(&user).Error
+	if err != nil {
+		return 0, fmt.Sprintf("Error fetching user status: %v", err)
+	}
 	return user.Status, ""
 }

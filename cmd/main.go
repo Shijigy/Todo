@@ -3,6 +3,7 @@ package main
 import (
 	"ToDo/config"
 	"ToDo/controllers"
+	"ToDo/dao"
 	"ToDo/repositories"
 	"ToDo/services"
 	"fmt"
@@ -95,6 +96,13 @@ func main() {
 			}
 		}
 	})
+
+	//创建连接数据库
+	err = dao.InitMySQL()
+	if err != nil {
+		panic(err)
+	}
+	defer dao.Close() // 程序退出关闭数据库连接
 
 	r.POST("/register", controllers.UserRegister)
 	// 用户登录接口

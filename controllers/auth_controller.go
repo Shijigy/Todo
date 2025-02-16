@@ -72,20 +72,91 @@ func UserLogin(c *gin.Context) {
 
 // SendEmailRegister 发送注册验证码
 func SendEmailRegister(c *gin.Context) {
-	// 根据你的需求，可能要实现发送验证码的具体逻辑
-	// 示例：发送注册邮箱验证码
-	c.JSON(http.StatusOK, gin.H{"message": "验证码已发送"})
+	sessionID, _ := c.Cookie("session")
+	fmt.Println(sessionID)
+	//sessionID := middles.GetSessionId(c)
+	var requestData struct {
+		Email string `form:"email" json:"email"`
+	}
+	if err := c.ShouldBind(&requestData); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "无效的请求数据"})
+		return
+	}
+	// 调用UserRegister函数进行注册
+	result := services.SendEmail(requestData.Email, sessionID, false)
+
+	// 根据注册结果返回相应的数据给前端
+	// 封装注册结果为RestBean对象
+	var restBeanRegister *models.RestBean
+	if result == "" {
+		restBeanRegister = models.SuccessRestBeanWithData("邮件已发送，请注意查收")
+
+	} else {
+		restBeanRegister = models.FailureRestBeanWithData(http.StatusBadRequest, result)
+	}
+	//返回注册结果给前端
+	c.JSON(restBeanRegister.Status, restBeanRegister)
 }
 
 // SendEmailReSet 发送重置密码验证码
 func SendEmailReSet(c *gin.Context) {
-	// 实现发送重置密码验证码的逻辑
+	sessionID, _ := c.Cookie("session")
+	//sessionID := middles.GetSessionId(c)
+	var requestData struct {
+		Email string `form:"email" json:"email"`
+	}
+	if err := c.ShouldBind(&requestData); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "无效的请求数据"})
+		return
+	}
+	// 调用UserRegister函数进行注册
+	result := services.SendEmail(requestData.Email, sessionID, true)
+
+	// 根据注册结果返回相应的数据给前端
+	// 封装注册结果为RestBean对象
+	var restBeanRegister *models.RestBean
+	if result == "" {
+		restBeanRegister = models.SuccessRestBeanWithData("邮件已发送，请注意查收")
+
+	} else {
+		restBeanRegister = models.FailureRestBeanWithData(http.StatusBadRequest, result)
+	}
+	//返回注册结果给前端
+	c.JSON(restBeanRegister.Status, restBeanRegister)
 	c.JSON(http.StatusOK, gin.H{"message": "重置密码验证码已发送"})
 }
 
 // ResetCodeVerify 验证邮箱验证码
 func ResetCodeVerify(c *gin.Context) {
-	// 实现验证码验证的逻辑
+	//sessionID := middles.GetSessionId(c)
+	sessionID, _ := c.Cookie("session")
+	// 获取验证参数
+	var requestData struct {
+		Email string `form:"email" json:"email"`
+		Code  string `form:"code" json:"code"`
+	}
+	if err := c.ShouldBind(&requestData); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "无效的请求数据"})
+		return
+	}
+	// 调用函数进行身份验证
+	result := services.ResetCode(requestData.Email, requestData.Code, sessionID)
+
+	// 根据注册结果返回相应的数据给前端
+	// 封装注册结果为RestBean对象
+	var restBeanRegister *models.RestBean
+	if result == "" {
+		// 在会话中设置重置密码的相关属性
+		middles.SetSessionAttribute(c, "reset-password", requestData.Email)
+		//email := middles.GetSessionAttribute(c, "reset-password")
+		//fmt.Println(email)
+		restBeanRegister = models.SuccessRestBean()
+
+	} else {
+		restBeanRegister = models.FailureRestBeanWithData(http.StatusBadRequest, result)
+	}
+	//返回结果给前端
+	c.JSON(restBeanRegister.Status, restBeanRegister)
 	c.JSON(http.StatusOK, gin.H{"message": "验证码验证通过"})
 }
 
