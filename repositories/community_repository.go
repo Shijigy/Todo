@@ -3,6 +3,7 @@ package repositories
 import (
 	"ToDo/models"
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/jinzhu/gorm"
@@ -51,6 +52,9 @@ func NewLikeRepository(db *gorm.DB) LikeRepository {
 func (r *communityRepository) CreatePost(ctx context.Context, post *models.CommunityPost) (*models.CommunityPost, error) {
 	post.CreatedAt = time.Now()
 	post.UpdatedAt = time.Now()
+	if r.db == nil {
+		return nil, fmt.Errorf("数据库连接为 nil")
+	}
 	if err := r.db.Create(post).Error; err != nil {
 		return nil, err
 	}

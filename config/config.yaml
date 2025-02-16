@@ -1,0 +1,11 @@
+database:
+  host: localhost
+  port: 3306
+  username: root
+  password: SHANG6688
+  dbname: todo
+email:
+  host: smtp.163.com
+  port: 465
+  username: 15691925305@163.com
+  password: Shang6688.

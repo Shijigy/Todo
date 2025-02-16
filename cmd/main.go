@@ -3,20 +3,19 @@ package main
 import (
 	"ToDo/config"
 	"ToDo/controllers"
-	"ToDo/middlewares"
-	"ToDo/models"
 	"ToDo/repositories"
 	"ToDo/services"
 	"fmt"
-	"github.com/gin-contrib/cors"
+	"github.com/gin-contrib/sessions"
+	"github.com/gin-contrib/sessions/cookie"
 	"github.com/gin-gonic/gin"
 	"github.com/jinzhu/gorm"
 	"log"
+	"net/http"
 )
 
 var db *gorm.DB
-var userRepo repositories.UserRepository
-var userService services.UserService
+
 var checkinRepo repositories.CheckinRepository
 var checkinService services.CheckinService
 var communityRepo repositories.CommunityRepository
@@ -53,10 +52,6 @@ func main() {
 	defer db.Close()
 
 	// 初始化各个仓库和服务
-	userRepo = repositories.NewUserRepository(db)
-	emailService := services.NewEmailService(config.Email.SMTPServer, config.Email.FromEmail, config.Email.Password)
-	userService = services.NewUserService(userRepo, emailService)
-
 	checkinRepo = repositories.NewCheckinRepository(db)
 	checkinService = services.NewCheckinService(checkinRepo)
 
@@ -69,23 +64,49 @@ func main() {
 
 	// 初始化 Gin 路由器
 	r := gin.Default()
-
-	// 使用日志中间件
-	r.Use(middlewares.LoggingMiddleware)
-
-	// CORS 配置
-	r.Use(cors.Default())
-
-	// 注册路由
-	r.POST("/auth/register", func(c *gin.Context) {
-		var user models.User
-		if err := c.ShouldBindJSON(&user); err != nil {
-			c.JSON(400, gin.H{"error": "Invalid user data"})
-			return
-		}
-
-		controllers.Register(c, userService, user)
+	// 设置 session 存储
+	store := cookie.NewStore([]byte("secret-key"))
+	store.Options(sessions.Options{
+		MaxAge:   3600, // 设置过期时间为1小时
+		HttpOnly: true, // 设置仅 HTTP 访问
 	})
+	// 注册会话中间件
+	r.Use(sessions.Sessions("session", store), func(c *gin.Context) {
+		// 获取当前会话
+		session := sessions.Default(c)
+
+		// 如果会话已过期，则重新设置会话信息
+		if session.Get("username") == nil {
+			// 设置会话值
+			session.Set("username", "exampleuser")
+
+			// 设置会话过期时间为1小时
+			session.Options(sessions.Options{
+				MaxAge:   3600,
+				HttpOnly: true,
+			})
+
+			// 保存会话
+			err := session.Save()
+			if err != nil {
+				// 处理保存会话时的错误
+				c.String(http.StatusInternalServerError, "Failed to save session")
+				return
+			}
+		}
+	})
+
+	r.POST("/register", controllers.UserRegister)
+	// 用户登录接口
+	r.POST("/login", controllers.UserLogin)
+	// 发送注册验证码
+	r.POST("/register-email", controllers.SendEmailRegister)
+	// 发送重置密码验证码
+	r.POST("/reset-email", controllers.SendEmailReSet)
+	// 验证身份接口
+	r.POST("/VerifyCode-email", controllers.ResetCodeVerify)
+	// 重设密码接口
+	r.POST("/reset-password", controllers.ResetPassword)
 
 	// Todo 路由
 	r.POST("/todo", func(c *gin.Context) {
@@ -127,10 +148,10 @@ func main() {
 	})
 
 	// 启动 HTTP 服务
-	fmt.Println("服务器正在运行在", config.ServerAddress)
+	fmt.Println("服务器正在运行在", ":8080")
 
 	// 启动 HTTP 服务并监听端口
-	if err := r.Run(config.ServerAddress); err != nil {
+	if err := r.Run(":8080"); err != nil {
 		log.Fatalf("启动服务器时出错: %v", err)
 	}
 }
