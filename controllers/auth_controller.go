@@ -198,7 +198,7 @@ func ResetPassword(c *gin.Context) {
 			restBeanRegister = models.SuccessRestBeanWithData("密码重置成功")
 			models.UpdateUserStatus(emailString, 0)
 		} else {
-			restBeanRegister = models.FailureRestBeanWithData(500, "内部错误，请联系管理员")
+			restBeanRegister = models.FailureRestBeanWithData(500, "内部错误")
 		}
 	} else {
 		restBeanRegister = models.FailureRestBeanWithData(http.StatusBadRequest, "请先完成邮箱认证")
