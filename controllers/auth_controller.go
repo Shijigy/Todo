@@ -82,9 +82,6 @@ func SendEmailRegister(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "无效的请求数据"})
 		return
 	}
-	fmt.Println("======================================================")
-	fmt.Println(requestData)
-	fmt.Println("======================================================")
 	// 调用UserRegister函数进行注册
 	result := services.SendEmail(requestData.Email, sessionID, false)
 
@@ -166,7 +163,6 @@ func ResetCodeVerify(c *gin.Context) {
 // ResetPassword 重设密码
 func ResetPassword(c *gin.Context) {
 
-	//sessionID, _ := c.Cookie("session")
 	// 获取重置密码参数
 	var requestData struct {
 		Password string `form:"password" json:"password"`
@@ -182,14 +178,7 @@ func ResetPassword(c *gin.Context) {
 	email := middles.GetSessionAttribute(c, "reset-password")
 	//将邮箱地址转换为字符串
 	emailString, _ := email.(string)
-	//var emailinit  =  strings.Index(newsession,"reset-password")
-	//for i:=emailinit+14;i<len(sessionID)
 	var restBeanRegister *models.RestBean
-	//if email == nil {
-	//	restBeanRegister = models.FailureRestBeanWithData(http.StatusBadRequest, "清先验证邮箱身份")
-	//status, _ := models.GetStatusByEmail(emailString)
-	//fmt.Println(emailString)
-	//fmt.Println(status)
 	if emailString != "" {
 		services.ResetPassword(requestData.Password, emailString)
 		if services.ResetPassword(requestData.Password, emailString) == "" {
@@ -206,4 +195,51 @@ func ResetPassword(c *gin.Context) {
 
 	//返回结果给前端
 	c.JSON(restBeanRegister.Status, restBeanRegister)
+}
+
+// DeactivateAccount 用户注销并删除所有数据
+func DeactivateAccount(c *gin.Context) {
+	var requestData struct {
+		Username string `form:"username" json:"username"`
+		Password string `form:"password" json:"password"`
+	}
+
+	// 获取请求数据
+	if err := c.ShouldBind(&requestData); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "无效的请求数据"})
+		return
+	}
+
+	// 如果用户名为空，则返回错误
+	if requestData.Username == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "用户名不能为空"})
+		return
+	}
+
+	// 从数据库获取该用户的加密密码
+	user, err := models.FindAUserByName(requestData.Username) // 根据请求中的用户名查找用户
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "用户信息获取失败"})
+		return
+	}
+
+	/*// 使用 bcrypt 验证密码
+	err = bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(requestData.Password))
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "密码验证失败"})
+		return
+	}*/
+	if requestData.Password != user.Password {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "密码验证失败"})
+		return
+	}
+
+	// 用户验证通过，删除用户数据
+	err = services.DeactivateUser(user.ID) // 通过 user.ID 删除用户数据
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "注销账户失败"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "账户已成功注销"})
 }

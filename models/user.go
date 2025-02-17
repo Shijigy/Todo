@@ -28,14 +28,6 @@ func CreateAUser(user *User) (err error) {
 	return
 }
 
-// GetAllUser 获取所有用户
-func GetAllUser() (userList []*User, err error) {
-	if err = dao.DB.Table("users").Find(&userList).Error; err != nil {
-		return nil, err
-	}
-	return
-}
-
 // FindAUserByName 根据用户名查询用户
 func FindAUserByName(username string) (user *User, err error) {
 	user = new(User)
@@ -92,4 +84,22 @@ func GetStatusByEmail(email string) (int, string) {
 		return 0, fmt.Sprintf("Error fetching user status: %v", err)
 	}
 	return user.Status, ""
+}
+
+// DeleteAUser 删除用户及其所有相关数据
+func DeleteAUser(userID string) error {
+	// 删除用户记录
+	err := dao.DB.Table("users").Where("id = ?", userID).Delete(&User{}).Error
+	if err != nil {
+		return fmt.Errorf("删除用户失败: %v", err)
+	}
+
+	// 删除用户的相关数据，如 Todo、Checkin 等
+	// 例如：
+	// err = dao.DB.Table("todos").Where("user_id = ?", userID).Delete(&Todo{}).Error
+	// if err != nil {
+	//     return fmt.Errorf("删除用户的 Todo 数据失败: %v", err)
+	// }
+
+	return nil
 }

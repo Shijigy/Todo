@@ -114,11 +114,9 @@ func main() {
 	// 验证身份接口
 	r.POST("/VerifyCode-email", controllers.ResetCodeVerify)
 	// 重设密码接口
-	/*r.POST("/reset-password", controllers.ResetPassword)*/
-	r.POST("/reset-password", func(c *gin.Context) {
-		fmt.Println("Received a POST request for /reset-password")
-		controllers.ResetPassword(c)
-	})
+	r.POST("/reset-password", controllers.ResetPassword)
+	// 注销账号
+	r.POST("/deactivate", controllers.DeactivateAccount)
 
 	// Todo 路由
 	r.POST("/todo", func(c *gin.Context) {

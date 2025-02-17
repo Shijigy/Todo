@@ -161,3 +161,21 @@ func ResetPassword(email string, password string) string {
 	models.UpdateUserStatus(email, 0)
 	return ""
 }
+
+// DeactivateUser 停用用户并删除所有相关数据
+func DeactivateUser(userID string) error {
+	// 从数据库中删除用户数据
+	err := models.DeleteAUser(userID)
+	if err != nil {
+		return fmt.Errorf("删除用户数据失败: %v", err)
+	}
+
+	// 如果有需要，可以在这里添加删除用户相关数据的逻辑，比如 Todo、Checkin 等
+	// 例如：
+	// err = models.DeleteUserTodos(userID)
+	// if err != nil {
+	//     return fmt.Errorf("删除用户的 Todo 数据失败: %v", err)
+	// }
+
+	return nil
+}
