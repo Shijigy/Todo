@@ -6,7 +6,10 @@ import (
 	"ToDo/services"
 	"fmt"
 	"github.com/gin-gonic/gin"
+	_ "github.com/go-redis/redis/v8"
 	"golang.org/x/crypto/bcrypt"
+	"image"
+	"mime/multipart"
 	"net/http"
 )
 
@@ -37,7 +40,13 @@ func UserRegister(c *gin.Context) {
 
 	var restBeanRegister *models.RestBean
 	if result == "" {
-		restBeanRegister = models.SuccessRestBeanWithData("注册成功")
+		// 获取用户注册后的详细信息，如用户名和头像URL
+		username, avatarURL, _ := services.UserLogin(requestData.Email, requestData.Password)
+		restBeanRegister = models.SuccessRestBeanWithData(gin.H{
+			"message":    "注册成功",
+			"username":   username,
+			"avatar_url": avatarURL,
+		})
 	} else {
 		restBeanRegister = models.FailureRestBeanWithData(http.StatusBadRequest, result)
 	}
@@ -58,10 +67,16 @@ func UserLogin(c *gin.Context) {
 		return
 	}
 
+	// 调用登录函数，并获取用户名和头像URL
+	username, avatarURL, result := services.UserLogin(requestData.Email, requestData.Password)
+
 	var restBeanLogin *models.RestBean
-	result := services.UserLogin(requestData.Email, requestData.Password)
 	if result == "" {
-		restBeanLogin = models.SuccessRestBeanWithData("登录成功")
+		restBeanLogin = models.SuccessRestBeanWithData(gin.H{
+			"message":    "登录成功",
+			"username":   username,
+			"avatar_url": avatarURL,
+		})
 	} else {
 		restBeanLogin = models.FailureRestBeanWithData(http.StatusBadRequest, result)
 	}
@@ -128,7 +143,6 @@ func SendEmailReSet(c *gin.Context) {
 
 // ResetCodeVerify 验证邮箱验证码
 func ResetCodeVerify(c *gin.Context) {
-	//sessionID := middles.GetSessionId(c)
 	sessionID, _ := c.Cookie("session")
 	// 获取验证参数
 	var requestData struct {
@@ -178,10 +192,11 @@ func ResetPassword(c *gin.Context) {
 	email := middles.GetSessionAttribute(c, "reset-password")
 	//将邮箱地址转换为字符串
 	emailString, _ := email.(string)
+
 	var restBeanRegister *models.RestBean
 	if emailString != "" {
-		services.ResetPassword(requestData.Password, emailString)
-		if services.ResetPassword(requestData.Password, emailString) == "" {
+		services.ResetPassword(emailString, requestData.Password)
+		if services.ResetPassword(emailString, requestData.Password) == "" {
 			middles.DeleteSessionKey(c, "reset-password")
 			fmt.Println(requestData.Password)
 			restBeanRegister = models.SuccessRestBeanWithData("密码重置成功")
@@ -223,12 +238,12 @@ func DeactivateAccount(c *gin.Context) {
 		return
 	}
 
-	/*// 使用 bcrypt 验证密码
+	// 使用 bcrypt 验证密码
 	err = bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(requestData.Password))
 	if err != nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "密码验证失败"})
 		return
-	}*/
+	}
 	if requestData.Password != user.Password {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "密码验证失败"})
 		return
@@ -242,4 +257,58 @@ func DeactivateAccount(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"message": "账户已成功注销"})
+}
+
+// isValidImage 验证图片类型和大小
+func isValidImage(file *multipart.FileHeader) bool {
+	// 打开文件读取
+	f, err := file.Open()
+	if err != nil {
+		return false
+	}
+	defer f.Close()
+
+	// 检查文件类型
+	img, _, err := image.Decode(f)
+	if err != nil {
+		return false
+	}
+
+	// 可选：限制图片的最大尺寸，例如宽度不超过 500px
+	maxWidth := 500
+	if img.Bounds().Max.X > maxWidth {
+		return false
+	}
+
+	return true
+}
+
+// UpdateProfile 处理更新用户名和头像请求
+func UpdateProfile(c *gin.Context) {
+	// 1. 获取登录用户的ID
+	userID, exists := c.Get("user_id") // 假设在用户登录后，用户ID存储在上下文中
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "用户未登录"})
+		return
+	}
+
+	var requestData struct {
+		Username  string `json:"username"`
+		AvatarURL string `json:"avatar_url"`
+	}
+
+	// 2. 绑定请求数据
+	if err := c.ShouldBindJSON(&requestData); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "无效的请求数据"})
+		return
+	}
+
+	// 3. 调用服务层函数来更新用户名和头像
+	result := services.UpdateUserProfile(userID.(string), requestData.Username, requestData.AvatarURL)
+
+	if result == "" {
+		c.JSON(http.StatusOK, gin.H{"message": "个人信息更新成功"})
+	} else {
+		c.JSON(http.StatusBadRequest, gin.H{"error": result})
+	}
 }

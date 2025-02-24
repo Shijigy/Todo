@@ -4,16 +4,56 @@ import (
 	"fmt"
 	"github.com/jinzhu/gorm"
 	_ "github.com/jinzhu/gorm/dialects/mysql"
+	"gopkg.in/yaml.v2"
+	"io/ioutil"
 )
 
 var (
 	DB *gorm.DB
 )
 
+// Config 用来存储从配置文件读取的数据库配置
+type Config struct {
+	Database struct {
+		Host     string `yaml:"host"`
+		Port     int    `yaml:"port"`
+		Username string `yaml:"username"`
+		Password string `yaml:"password"`
+		Dbname   string `yaml:"dbname"`
+	} `yaml:"database"`
+}
+
+var config Config
+
+// LoadConfig 读取配置文件
+func LoadConfig() error {
+	data, err := ioutil.ReadFile("./config/config.yaml")
+	if err != nil {
+		return fmt.Errorf("无法读取配置文件: %v", err)
+	}
+	if err := yaml.Unmarshal(data, &config); err != nil {
+		return fmt.Errorf("无法解析配置文件: %v", err)
+	}
+	return nil
+}
+
 // InitMySQL 初始化数据库连接
 func InitMySQL() (err error) {
+	// 加载配置
+	if err := LoadConfig(); err != nil {
+		return err
+	}
+
 	// 数据库连接字符串
-	dsn := "root:SHANG6688@tcp(127.0.0.1:3306)/todo?charset=utf8mb4&parseTime=True&loc=Local"
+	dsn := fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?charset=utf8mb4&parseTime=True&loc=Local",
+		config.Database.Username,
+		config.Database.Password,
+		config.Database.Host,
+		config.Database.Port,
+		config.Database.Dbname,
+	)
+
+	// 连接数据库
 	DB, err = gorm.Open("mysql", dsn)
 	if err != nil {
 		return fmt.Errorf("无法连接数据库: %v", err)
@@ -23,6 +63,7 @@ func InitMySQL() (err error) {
 	if err := DB.DB().Ping(); err != nil {
 		return fmt.Errorf("数据库连接测试失败: %v", err)
 	}
+
 	return nil
 }
 

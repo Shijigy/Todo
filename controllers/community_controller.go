@@ -41,9 +41,16 @@ func GetPosts(w http.ResponseWriter, r *http.Request, service services.Community
 	// 获取查询参数
 	page := r.URL.Query().Get("page")
 	limit := r.URL.Query().Get("limit")
-	tags := r.URL.Query().Get("tags")      // 标签筛选
-	userID := r.URL.Query().Get("user_id") // 用户 ID 筛选
 	sort := r.URL.Query().Get("sort")      // 排序方式，默认为时间降序
+	userID := r.URL.Query().Get("user_id") // 根据用户 ID 获取动态
+
+	// 如果没有提供 user_id，则返回错误
+	if userID == "" {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(models.Response{Error: "user_id is required"})
+		return
+	}
 
 	// 设置默认分页值
 	if page == "" {
@@ -53,8 +60,8 @@ func GetPosts(w http.ResponseWriter, r *http.Request, service services.Community
 		limit = "10"
 	}
 
-	// 调用服务层获取符合条件的社区帖子
-	posts, err := service.GetCommunityPostsService(r.Context(), service.Repo, page, limit, tags, userID, sort)
+	// 调用服务层获取符合条件的社区帖子，仅根据 user_id 进行筛选
+	posts, err := service.GetCommunityPostsService(r.Context(), service.Repo, page, limit, "", userID, sort)
 	if err != nil {
 		// 返回错误信息，格式化为 JSON
 		w.Header().Set("Content-Type", "application/json")

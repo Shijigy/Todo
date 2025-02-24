@@ -5,11 +5,10 @@ import (
 	middles "ToDo/middlewares"
 	"ToDo/models"
 	"fmt"
+	"golang.org/x/crypto/bcrypt"
 	"strconv"
 	"time"
 )
-
-// var PasswordMap = make(map[string]string])
 
 // UserRegister 普通用户的注册
 func UserRegister(username string, password string, email string, code string, sessionId string) string {
@@ -36,16 +35,17 @@ func UserRegister(username string, password string, email string, code string, s
 			return "此用户名已被注册，请更换用户名"
 		}
 		RedisClient.Del(key)
-		// 对密码进行加密
-		//privateencode := middles.Encode(password)
 		privateencode := password
 		password = privateencode
+		// 检查头像URL，如果没有传入则设置为默认头像
+		avatarURL := "content://media/picker/0/com.android.providers.media.photopicker/media/1000020703" // 默认头像URL
 		// 创建新用户
 		user := models.User{
-			Username: username,
-			Password: password,
-			Email:    email,
-			Status:   0,
+			Username:  username,
+			Password:  password,
+			Email:     email,
+			Status:    0,
+			AvatarURL: avatarURL, // 设置默认头像
 		}
 
 		err := models.CreateAUser(&user)
@@ -60,23 +60,32 @@ func UserRegister(username string, password string, email string, code string, s
 }
 
 // UserLogin 普通用户的登录
-func UserLogin(email string, password string) string {
-	//判断用户名是不是为空
+func UserLogin(email string, password string) (string, string, string) {
+	// 判断邮箱是不是为空
 	if email == "" {
-		return "邮箱不能为空"
+		return "", "", "邮箱不能为空"
 	}
-	// 根据用户名从数据库中获取用户信息
-	user, _ := models.FindAUserByEmail(email)
+
+	// 根据邮箱从数据库中获取用户信息
+	user, err := models.FindAUserByEmail(email)
+	if err != nil {
+		return "", "", "获取用户信息失败"
+	}
 
 	// 验证用户是否存在
 	if user == nil {
-		return "用户不存在"
-	}
-	if password != user.Password {
-		return "密码不正确"
+		return "", "", "用户不存在"
 	}
 
-	return "" // 登录成功，返回空字符串表示成功
+	// 使用 bcrypt.CompareHashAndPassword 比对用户输入的密码与数据库中的加密密码
+	err = bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(password))
+	if err != nil {
+		// 如果密码不匹配，返回错误信息
+		return "", "", "密码不正确"
+	}
+
+	// 登录成功，返回用户名和头像URL
+	return user.Username, user.AvatarURL, ""
 }
 
 // SendEmail 发送验证码
@@ -155,11 +164,24 @@ func ResetCode(email string, code string, sessionId string) string {
 
 // ResetPassword 邮箱验证通过后才能修改密码
 func ResetPassword(email string, password string) string {
-	//password = middles.Encode(password)
-	models.UpdateUserPasswordByEmail(password, email)
-	fmt.Println(password)
+	// 对密码进行加密
+	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	if err != nil {
+		return "加密密码时发生错误"
+	}
+
+	// 将加密后的密码存入数据库
+	err = models.UpdateUserPasswordByEmail(email, string(hash))
+	if err != nil {
+		return "更新密码时发生错误"
+	}
+
+	// 打印加密后的密码
+	fmt.Println("Encrypted Password:", string(hash))
+
+	// 重置密码修改状态
 	models.UpdateUserStatus(email, 0)
-	return ""
+	return "" // 返回空表示密码重置成功
 }
 
 // DeactivateUser 停用用户并删除所有相关数据
@@ -169,13 +191,56 @@ func DeactivateUser(userID string) error {
 	if err != nil {
 		return fmt.Errorf("删除用户数据失败: %v", err)
 	}
+	// 删除 likes 表中的相关数据
+	err = models.DeleteUserLikes(userID)
+	if err != nil {
+		return fmt.Errorf("删除用户的点赞数据失败: %v", err)
+	}
 
-	// 如果有需要，可以在这里添加删除用户相关数据的逻辑，比如 Todo、Checkin 等
-	// 例如：
-	// err = models.DeleteUserTodos(userID)
-	// if err != nil {
-	//     return fmt.Errorf("删除用户的 Todo 数据失败: %v", err)
-	// }
+	// 删除 community_posts 表中的相关数据
+	err = models.DeleteUserCommunityPosts(userID)
+	if err != nil {
+		return fmt.Errorf("删除用户的社区动态数据失败: %v", err)
+	}
+
+	// 删除 checkins 表中的相关数据
+	err = models.DeleteUserCheckins(userID)
+	if err != nil {
+		return fmt.Errorf("删除用户的打卡数据失败: %v", err)
+	}
+
+	// 删除 todos 表中的相关数据
+	err = models.DeleteUserTodos(userID)
+	if err != nil {
+		return fmt.Errorf("删除用户的待办任务数据失败: %v", err)
+	}
 
 	return nil
+}
+
+// UpdateUserProfile 更新用户名和头像
+func UpdateUserProfile(userID string, newUsername string, newAvatarURL string) string {
+	// 第一步：验证用户是否存在
+	user, err := models.FindAUserByID(userID)
+	if err != nil {
+		return "用户不存在"
+	}
+
+	// 第二步：如果提供了新的用户名，则更新用户名
+	if newUsername != "" && newUsername != user.Username {
+		user.Username = newUsername
+	}
+
+	// 第三步：如果提供了新的头像URL，则更新头像
+	if newAvatarURL != "" {
+		user.AvatarURL = newAvatarURL
+	}
+
+	// 第四步：保存更新后的用户信息
+	err = models.UpdateUserProfile(user)
+	if err != nil {
+		return "更新个人信息失败"
+	}
+
+	return ""
 }

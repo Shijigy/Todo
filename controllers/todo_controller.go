@@ -5,7 +5,7 @@ import (
 	"ToDo/services"
 	"context"
 	"encoding/json"
-	"github.com/gorilla/mux"
+	"github.com/gin-gonic/gin"
 	"net/http"
 	"time"
 )
@@ -58,31 +58,25 @@ func CreateTodo(w http.ResponseWriter, r *http.Request, todoService services.Tod
 	json.NewEncoder(w).Encode(models.Response{Message: "Todo created successfully", Data: createdTodo})
 }
 
-// GetTodo 获取单个待办任务
-func GetTodo(w http.ResponseWriter, r *http.Request, todoService services.TodoService) {
-	params := mux.Vars(r)
-	todoID := params["id"]
-
+// GetTodos 获取所有待办任务
+func GetTodos(w http.ResponseWriter, r *http.Request, todoService services.TodoService) {
 	// 传递 context 到服务层
 	ctx := r.Context()
-	todo, err := todoService.GetTodoService(ctx, todoID)
+	todos, err := todoService.GetTodosService(ctx)
 	if err != nil {
 		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusNotFound)
+		w.WriteHeader(http.StatusInternalServerError)
 		json.NewEncoder(w).Encode(models.Response{Error: err.Error()})
 		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(models.Response{Message: "Todo fetched successfully", Data: todo})
+	json.NewEncoder(w).Encode(models.Response{Message: "Todos fetched successfully", Data: todos})
 }
 
 // UpdateTodo 更新待办任务
 func UpdateTodo(w http.ResponseWriter, r *http.Request, todoService services.TodoService) {
-	params := mux.Vars(r)
-	todoID := params["id"]
-
 	var todo models.Todo
 	if err := json.NewDecoder(r.Body).Decode(&todo); err != nil {
 		w.Header().Set("Content-Type", "application/json")
@@ -93,7 +87,7 @@ func UpdateTodo(w http.ResponseWriter, r *http.Request, todoService services.Tod
 
 	// 传递 context 到服务层
 	ctx := r.Context()
-	err := todoService.UpdateTodoStatusService(ctx, todoID, todo)
+	err := todoService.UpdateTodoStatusService(ctx, todo.ID, todo)
 	if err != nil {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusNotFound)
@@ -107,21 +101,40 @@ func UpdateTodo(w http.ResponseWriter, r *http.Request, todoService services.Tod
 }
 
 // DeleteTodo 删除待办任务
-func DeleteTodo(w http.ResponseWriter, r *http.Request, todoService services.TodoService) {
-	params := mux.Vars(r)
-	todoID := params["id"]
+func DeleteTodo(c *gin.Context, todoService services.TodoService) {
+	todoID := c.Param("id")
 
 	// 传递 context 到服务层
-	ctx := r.Context()
+	ctx := c.Request.Context()
 	err := todoService.DeleteTodoService(ctx, todoID)
 	if err != nil {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusNotFound)
-		json.NewEncoder(w).Encode(models.Response{Error: err.Error()})
+		c.JSON(http.StatusNotFound, models.Response{Error: err.Error()})
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(models.Response{Message: "Todo deleted successfully"})
+	c.JSON(http.StatusOK, models.Response{Message: "Todo deleted successfully"})
+}
+
+// MarkTodoAsCompleted 标记任务为已完成
+func MarkTodoAsCompleted(c *gin.Context, todoService services.TodoService) {
+	var request struct {
+		Title string `json:"title"`
+	}
+
+	// 使用 ShouldBind 来解析请求体
+	if err := c.ShouldBind(&request); err != nil {
+		c.JSON(http.StatusBadRequest, models.Response{Error: "Invalid input"})
+		return
+	}
+
+	// 传递 context 到服务层
+	ctx := c.Request.Context()
+	updatedTodo, err := todoService.MarkTodoAsCompletedService(ctx, request.Title)
+	if err != nil {
+		c.JSON(http.StatusNotFound, models.Response{Error: err.Error()})
+		return
+	}
+
+	// 直接使用 c.JSON 设置响应头、状态码以及响应数据
+	c.JSON(http.StatusOK, models.Response{Message: "Todo marked as completed", Data: updatedTodo})
 }

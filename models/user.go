@@ -4,6 +4,8 @@ import (
 	"ToDo/dao"
 	"fmt"
 	"github.com/jinzhu/gorm"
+	"image"
+	"mime/multipart"
 	"time"
 )
 
@@ -16,11 +18,8 @@ type User struct {
 	CreatedAt time.Time `json:"created_at" bson:"created_at"`
 	UpdatedAt time.Time `json:"updated_at" bson:"updated_at"`
 	Status    int       `json:"status"`
+	AvatarURL string    `json:"avatar_url" bson:"avatar_url"` // 头像 URL
 }
-
-/*
-	User这个Model的增删改查操作都放在这里
-*/
 
 // CreateAUser 创建user
 func CreateAUser(user *User) (err error) {
@@ -46,6 +45,18 @@ func FindAUserByEmail(email string) (user *User, err error) {
 	if err = dao.DB.Debug().Table("users").Where("email=?", email).First(user).Error; err != nil {
 		if gorm.IsRecordNotFoundError(err) {
 			return nil, fmt.Errorf("user not found with email: %s", email)
+		}
+		return nil, err
+	}
+	return
+}
+
+// FindAUserByID 根据用户ID查询用户
+func FindAUserByID(userID string) (user *User, err error) {
+	user = new(User)
+	if err = dao.DB.Debug().Table("users").Where("id=?", userID).First(user).Error; err != nil {
+		if gorm.IsRecordNotFoundError(err) {
+			return nil, fmt.Errorf("user not found with ID: %s", userID)
 		}
 		return nil, err
 	}
@@ -94,12 +105,80 @@ func DeleteAUser(userID string) error {
 		return fmt.Errorf("删除用户失败: %v", err)
 	}
 
-	// 删除用户的相关数据，如 Todo、Checkin 等
-	// 例如：
-	// err = dao.DB.Table("todos").Where("user_id = ?", userID).Delete(&Todo{}).Error
-	// if err != nil {
-	//     return fmt.Errorf("删除用户的 Todo 数据失败: %v", err)
-	// }
+	return nil
+}
 
+// isValidImage 验证图片类型和大小
+func isValidImage(file *multipart.FileHeader) bool {
+	// 打开文件读取
+	f, err := file.Open()
+	if err != nil {
+		return false
+	}
+	defer f.Close()
+
+	// 检查文件类型
+	img, _, err := image.Decode(f)
+	if err != nil {
+		return false
+	}
+
+	// 可选：限制图片的最大尺寸，例如宽度不超过 500px
+	maxWidth := 500
+	if img.Bounds().Max.X > maxWidth {
+		return false
+	}
+
+	return true
+}
+
+// UpdateUserProfile 更新用户的用户名和头像
+func UpdateUserProfile(user *User) error {
+	// 更新数据库中的用户名和头像
+	err := dao.DB.Table("users").Where("id = ?", user.ID).Updates(map[string]interface{}{
+		"username":   user.Username,
+		"avatar_url": user.AvatarURL,
+		"updated_at": time.Now(),
+	}).Error
+
+	if err != nil {
+		return fmt.Errorf("更新用户信息失败: %v", err)
+	}
+	return nil
+}
+
+// DeleteUserLikes 删除用户的点赞记录
+func DeleteUserLikes(userID string) error {
+	err := dao.DB.Table("likes").Where("user_id = ?", userID).Delete(&Like{}).Error
+	if err != nil {
+		return fmt.Errorf("删除点赞记录失败: %v", err)
+	}
+	return nil
+}
+
+// DeleteUserCommunityPosts 删除用户的社区动态
+func DeleteUserCommunityPosts(userID string) error {
+	err := dao.DB.Table("community_posts").Where("user_id = ?", userID).Delete(&CommunityPost{}).Error
+	if err != nil {
+		return fmt.Errorf("删除社区动态数据失败: %v", err)
+	}
+	return nil
+}
+
+// DeleteUserCheckins 删除用户的打卡记录
+func DeleteUserCheckins(userID string) error {
+	err := dao.DB.Table("checkins").Where("user_id = ?", userID).Delete(&Checkin{}).Error
+	if err != nil {
+		return fmt.Errorf("删除打卡数据失败: %v", err)
+	}
+	return nil
+}
+
+// DeleteUserTodos 删除用户的待办任务记录
+func DeleteUserTodos(userID string) error {
+	err := dao.DB.Table("todos").Where("user_id = ?", userID).Delete(&Todo{}).Error
+	if err != nil {
+		return fmt.Errorf("删除待办任务数据失败: %v", err)
+	}
 	return nil
 }

@@ -1,21 +1,17 @@
 package main
 
 import (
-	"ToDo/config"
 	"ToDo/controllers"
 	"ToDo/dao"
+	"ToDo/middlewares"
 	"ToDo/repositories"
 	"ToDo/services"
-	"fmt"
 	"github.com/gin-contrib/sessions"
 	"github.com/gin-contrib/sessions/cookie"
 	"github.com/gin-gonic/gin"
-	"github.com/jinzhu/gorm"
 	"log"
 	"net/http"
 )
-
-var db *gorm.DB
 
 var checkinRepo repositories.CheckinRepository
 var checkinService services.CheckinService
@@ -27,40 +23,23 @@ var likeRepo repositories.LikeRepository
 
 // 启动入口
 func main() {
-	// 加载配置
-	config, err := config.LoadConfig()
+
+	//创建连接数据库
+	err := dao.InitMySQL()
 	if err != nil {
-		log.Fatalf("加载配置时出错: %v", err)
+		panic(err)
 	}
-
-	// 输出加载的配置
-	fmt.Println("服务器地址:", config.ServerAddress)
-	fmt.Println("数据库主机:", config.Database.Host)
-
-	// 初始化数据库连接
-	dsn := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?charset=utf8mb4&parseTime=True&loc=Local",
-		config.Database.Username,
-		config.Database.Password,
-		config.Database.Host,
-		config.Database.Port,
-		config.Database.DbName,
-	)
-
-	db, err = gorm.Open("mysql", dsn)
-	if err != nil {
-		log.Fatalf("连接数据库时出错: %v", err)
-	}
-	defer db.Close()
+	defer dao.Close() // 程序退出关闭数据库连接
 
 	// 初始化各个仓库和服务
-	checkinRepo = repositories.NewCheckinRepository(db)
+	checkinRepo = repositories.NewCheckinRepository(dao.DB)
 	checkinService = services.NewCheckinService(checkinRepo)
 
-	communityRepo = repositories.NewCommunityRepository(db)
-	likeRepo = repositories.NewLikeRepository(db)
+	communityRepo = repositories.NewCommunityRepository(dao.DB)
+	likeRepo = repositories.NewLikeRepository(dao.DB)
 	communityService = services.NewCommunityService(communityRepo, likeRepo)
 
-	todoRepo = repositories.NewTodoRepository(db)
+	todoRepo = repositories.NewTodoRepository(dao.DB)
 	todoService = services.NewTodoService(todoRepo)
 
 	// 初始化 Gin 路由器
@@ -97,13 +76,6 @@ func main() {
 		}
 	})
 
-	//创建连接数据库
-	err = dao.InitMySQL()
-	if err != nil {
-		panic(err)
-	}
-	defer dao.Close() // 程序退出关闭数据库连接
-
 	r.POST("/register", controllers.UserRegister)
 	// 用户登录接口
 	r.POST("/login", controllers.UserLogin)
@@ -117,24 +89,47 @@ func main() {
 	r.POST("/reset-password", controllers.ResetPassword)
 	// 注销账号
 	r.POST("/deactivate", controllers.DeactivateAccount)
+	// 更新用户名和头像
+	r.PUT("/profile", middlewares.AuthMiddleware(), controllers.UpdateProfile)
 
 	// Todo 路由
-	r.POST("/todo", func(c *gin.Context) {
+	// 创建任务
+	r.POST("/create-todo", func(c *gin.Context) {
 		controllers.CreateTodo(c.Writer, c.Request, todoService)
 	})
-	r.GET("/todo/:id", func(c *gin.Context) {
-		controllers.GetTodo(c.Writer, c.Request, todoService)
+	// 获取所有任务
+	r.GET("/get-todo", func(c *gin.Context) {
+		controllers.GetTodos(c.Writer, c.Request, todoService)
 	})
-	r.PUT("/todo/:id", func(c *gin.Context) {
+
+	// 修改任务（通过请求体传递任务 ID 和其他字段）
+	r.PUT("/reset-todo", func(c *gin.Context) {
 		controllers.UpdateTodo(c.Writer, c.Request, todoService)
 	})
-	r.DELETE("/todo/:id", func(c *gin.Context) {
-		controllers.DeleteTodo(c.Writer, c.Request, todoService)
+	// 删除任务（通过请求体传递任务 ID）
+	r.DELETE("/delete-todo/:id", func(c *gin.Context) {
+		controllers.DeleteTodo(c, todoService)
+	})
+	// 标记任务为已完成
+	r.PUT("/complete", func(c *gin.Context) {
+		controllers.MarkTodoAsCompleted(c, todoService)
 	})
 
 	// Checkin 路由
 	r.POST("/checkin", func(c *gin.Context) {
 		controllers.Checkin(c.Writer, c.Request, checkinService)
+	})
+	r.GET("/get-checkin", func(c *gin.Context) {
+		controllers.GetCheckinRecordByUserID(c.Writer, c.Request, checkinService)
+	})
+	r.PUT("/checkin/complete", func(c *gin.Context) {
+		controllers.MarkCheckinComplete(c.Writer, c.Request, checkinService)
+	})
+	r.PUT("/checkin/update-count", func(c *gin.Context) {
+		controllers.UpdateCheckinCount(c.Writer, c.Request, checkinService)
+	})
+	r.DELETE("/checkin/delete", func(c *gin.Context) {
+		controllers.DeleteCheckin(c.Writer, c.Request, checkinService)
 	})
 
 	// 社区动态路由
@@ -157,11 +152,8 @@ func main() {
 		controllers.GetLikesCount(c.Writer, c.Request, communityService)
 	})
 
-	// 启动 HTTP 服务
-	fmt.Println("服务器正在运行在", ":8080")
-
 	// 启动 HTTP 服务并监听端口
-	if err := r.Run(":8080"); err != nil {
+	if err := r.Run("0.0.0.0:9999"); err != nil {
 		log.Fatalf("启动服务器时出错: %v", err)
 	}
 }
