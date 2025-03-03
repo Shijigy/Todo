@@ -2,12 +2,9 @@ package services
 
 import (
 	"ToDo/dao"
-	middles "ToDo/middlewares"
 	"ToDo/models"
 	"fmt"
 	"golang.org/x/crypto/bcrypt"
-	"strconv"
-	"time"
 )
 
 // UserRegister 普通用户的注册
@@ -60,68 +57,32 @@ func UserRegister(username string, password string, email string, code string, s
 }
 
 // UserLogin 普通用户的登录
-func UserLogin(email string, password string) (string, string, string) {
+func UserLogin(email string, password string) (string, string, string, string) {
 	// 判断邮箱是不是为空
 	if email == "" {
-		return "", "", "邮箱不能为空"
+		return "", "", "", "邮箱不能为空"
 	}
 
 	// 根据邮箱从数据库中获取用户信息
 	user, err := models.FindAUserByEmail(email)
 	if err != nil {
-		return "", "", "获取用户信息失败"
+		return "", "", "", "获取用户信息失败"
 	}
 
 	// 验证用户是否存在
 	if user == nil {
-		return "", "", "用户不存在"
+		return "", "", "", "用户不存在"
 	}
 
 	// 使用 bcrypt.CompareHashAndPassword 比对用户输入的密码与数据库中的加密密码
 	err = bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(password))
 	if err != nil {
 		// 如果密码不匹配，返回错误信息
-		return "", "", "密码不正确"
+		return "", "", "", "密码不正确"
 	}
 
-	// 登录成功，返回用户名和头像URL
-	return user.Username, user.AvatarURL, ""
-}
-
-// SendEmail 发送验证码
-func SendEmail(email string, sessionId string, hashAccount bool) string {
-	//连接redis
-	RedisClient, err := dao.ConnectToRedis()
-	key := "email:" + sessionId + ":" + email + ":" + strconv.FormatBool(hashAccount)
-	pan, _ := RedisClient.Exists(key).Result()
-	if pan == 1 {
-		expire, _ := RedisClient.TTL(key).Result()
-		if expire > 120*time.Second {
-			return "请求频繁，请稍后再试"
-		}
-	}
-
-	// 模拟查找账户
-	account, _ := models.FindAUserByEmail(email)
-	if hashAccount && account == nil {
-		return "没有此邮件地址的账户"
-	}
-	if !hashAccount && account != nil {
-		return "此邮箱已被其他用户注册"
-	}
-
-	// 模拟发送邮件
-	result := middles.SendCode(email)
-	if result == "" {
-		return "邮件发送失败，请检查邮件地址是否有效"
-	}
-
-	err = RedisClient.Set(key, result, 3*time.Minute).Err()
-	if err != nil {
-		// 处理缓存错误
-	}
-
-	return ""
+	// 登录成功，返回用户名、头像URL和用户ID
+	return user.Username, user.AvatarURL, user.ID, ""
 }
 
 // ResetCode 修改时申请发送验证码，就是验证邮箱那一步，验证完后才能开始修改密码

@@ -1,9 +1,11 @@
 package controllers
 
 import (
+	"ToDo/dao"
 	middles "ToDo/middlewares"
 	"ToDo/models"
 	"ToDo/services"
+	"ToDo/utils"
 	"fmt"
 	"github.com/gin-gonic/gin"
 	_ "github.com/go-redis/redis/v8"
@@ -11,6 +13,8 @@ import (
 	"image"
 	"mime/multipart"
 	"net/http"
+	"strconv"
+	"time"
 )
 
 // UserRegister 用户注册并返回信息给客户端
@@ -41,12 +45,24 @@ func UserRegister(c *gin.Context) {
 	var restBeanRegister *models.RestBean
 	if result == "" {
 		// 获取用户注册后的详细信息，如用户名和头像URL
-		username, avatarURL, _ := services.UserLogin(requestData.Email, requestData.Password)
-		restBeanRegister = models.SuccessRestBeanWithData(gin.H{
-			"message":    "注册成功",
-			"username":   username,
-			"avatar_url": avatarURL,
-		})
+		username, avatarURL, userID, err := services.UserLogin(requestData.Email, requestData.Password)
+		if err != "" {
+			restBeanRegister = models.FailureRestBeanWithData(http.StatusBadRequest, err)
+		} else {
+			// 生成 JWT token
+			token, err := utils.GenerateToken(userID, username)
+			if err != nil {
+				restBeanRegister = models.FailureRestBeanWithData(http.StatusInternalServerError, "生成 Token 失败")
+			} else {
+				restBeanRegister = models.SuccessRestBeanWithData(gin.H{
+					"message":      "注册成功",
+					"username":     username,
+					"avatar_url":   avatarURL,
+					"user_id":      userID,
+					"access_token": token,
+				})
+			}
+		}
 	} else {
 		restBeanRegister = models.FailureRestBeanWithData(http.StatusBadRequest, result)
 	}
@@ -55,7 +71,7 @@ func UserRegister(c *gin.Context) {
 	c.JSON(restBeanRegister.Status, restBeanRegister)
 }
 
-// 用户登录并返回信息给客户端
+// UserLogin 用户登录并返回信息给客户端
 func UserLogin(c *gin.Context) {
 	var requestData struct {
 		Email    string `form:"email" json:"email"`
@@ -67,16 +83,24 @@ func UserLogin(c *gin.Context) {
 		return
 	}
 
-	// 调用登录函数，并获取用户名和头像URL
-	username, avatarURL, result := services.UserLogin(requestData.Email, requestData.Password)
+	// 调用登录函数，并获取用户名、头像URL和用户ID
+	username, avatarURL, userID, result := services.UserLogin(requestData.Email, requestData.Password)
 
 	var restBeanLogin *models.RestBean
 	if result == "" {
-		restBeanLogin = models.SuccessRestBeanWithData(gin.H{
-			"message":    "登录成功",
-			"username":   username,
-			"avatar_url": avatarURL,
-		})
+		// 生成 JWT token
+		token, err := utils.GenerateToken(userID, username)
+		if err != nil {
+			restBeanLogin = models.FailureRestBeanWithData(http.StatusInternalServerError, "生成 Token 失败")
+		} else {
+			restBeanLogin = models.SuccessRestBeanWithData(gin.H{
+				"message":      "登录成功",
+				"username":     username,
+				"avatar_url":   avatarURL,
+				"user_id":      userID,
+				"access_token": token,
+			})
+		}
 	} else {
 		restBeanLogin = models.FailureRestBeanWithData(http.StatusBadRequest, result)
 	}
@@ -98,7 +122,7 @@ func SendEmailRegister(c *gin.Context) {
 		return
 	}
 	// 调用UserRegister函数进行注册
-	result := services.SendEmail(requestData.Email, sessionID, false)
+	result := SendEmail(requestData.Email, sessionID, false)
 
 	// 根据注册结果返回相应的数据给前端
 	// 封装注册结果为RestBean对象
@@ -113,6 +137,42 @@ func SendEmailRegister(c *gin.Context) {
 	c.JSON(restBeanRegister.Status, restBeanRegister)
 }
 
+// SendEmail 发送验证码
+func SendEmail(email string, sessionId string, hashAccount bool) string {
+	//连接redis
+	RedisClient, err := dao.ConnectToRedis()
+	key := "email:" + sessionId + ":" + email + ":" + strconv.FormatBool(hashAccount)
+	pan, _ := RedisClient.Exists(key).Result()
+	if pan == 1 {
+		expire, _ := RedisClient.TTL(key).Result()
+		if expire > 120*time.Second {
+			return "请求频繁，请稍后再试"
+		}
+	}
+
+	// 模拟查找账户
+	account, _ := models.FindAUserByEmail(email)
+	if hashAccount && account == nil {
+		return "没有此邮件地址的账户"
+	}
+	if !hashAccount && account != nil {
+		return "此邮箱已被其他用户注册"
+	}
+
+	// 模拟发送邮件
+	result := middles.SendCode(email)
+	if result == "" {
+		return "邮件发送失败，请检查邮件地址是否有效"
+	}
+
+	err = RedisClient.Set(key, result, 3*time.Minute).Err()
+	if err != nil {
+		// 处理缓存错误
+	}
+
+	return ""
+}
+
 // SendEmailReSet 发送重置密码验证码
 func SendEmailReSet(c *gin.Context) {
 	sessionID, _ := c.Cookie("session")
@@ -125,7 +185,7 @@ func SendEmailReSet(c *gin.Context) {
 		return
 	}
 	// 调用UserRegister函数进行注册
-	result := services.SendEmail(requestData.Email, sessionID, true)
+	result := SendEmail(requestData.Email, sessionID, true)
 
 	// 根据注册结果返回相应的数据给前端
 	// 封装注册结果为RestBean对象
