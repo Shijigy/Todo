@@ -7,7 +7,7 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
-// UserRegister 普通用户的注册
+// UserRegister 用户的注册
 func UserRegister(username string, password string, email string, code string, sessionId string) string {
 	//连接redis
 	RedisClient, err := dao.ConnectToRedis()

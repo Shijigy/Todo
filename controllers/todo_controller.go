@@ -10,7 +10,6 @@ import (
 	"time"
 )
 
-// CreateTodo 创建待办任务
 func CreateTodo(w http.ResponseWriter, r *http.Request, todoService services.TodoService) {
 	// 检查是否为离线模式
 	isOffline := r.Header.Get("Is-Offline") == "true"
@@ -23,10 +22,17 @@ func CreateTodo(w http.ResponseWriter, r *http.Request, todoService services.Tod
 		return
 	}
 
+	// 解析 updated_at 字符串为 time.Time
+	if todo.UpdatedAt.IsZero() {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(models.Response{Error: "UpdatedAt is required"})
+		return
+	}
+
 	// 离线模式
 	if isOffline {
 		todo.CreatedAt = time.Now()
-		todo.UpdatedAt = time.Now()
 
 		// 在离线模式下，传递 context.Background() 而不是 r.Context()
 		err := todoService.SaveOffline(context.Background(), todo)
@@ -58,11 +64,29 @@ func CreateTodo(w http.ResponseWriter, r *http.Request, todoService services.Tod
 	json.NewEncoder(w).Encode(models.Response{Message: "Todo created successfully", Data: createdTodo})
 }
 
-// GetTodos 获取所有待办任务
 func GetTodos(w http.ResponseWriter, r *http.Request, todoService services.TodoService) {
+	// 获取查询参数
+	userID := r.URL.Query().Get("user_id")
+	updatedAtStr := r.URL.Query().Get("updated_at") // 接收更新日期
+
+	// 解析 updated_at 字符串为 time.Time，并只获取到日期部分
+	var updatedAt time.Time
+	var err error
+	if updatedAtStr != "" {
+		updatedAt, err = time.Parse("2006-01-02", updatedAtStr) // 仅解析到日期，忽略时间部分
+		if err != nil {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(models.Response{Error: "无效的 updated_at 格式，预期为 YYYY-MM-DD"})
+			return
+		}
+		// 设置时间为00:00:00，确保只比对日期部分
+		updatedAt = updatedAt.Add(time.Hour * 24 * 0) // 将时间设置为午夜（00:00:00），忽略时间
+	}
+
 	// 传递 context 到服务层
 	ctx := r.Context()
-	todos, err := todoService.GetTodosService(ctx)
+	todos, err := todoService.GetTodosService(ctx, userID, updatedAt)
 	if err != nil {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusInternalServerError)
@@ -72,7 +96,7 @@ func GetTodos(w http.ResponseWriter, r *http.Request, todoService services.TodoS
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(models.Response{Message: "Todos fetched successfully", Data: todos})
+	json.NewEncoder(w).Encode(models.Response{Message: "任务获取成功", Data: todos})
 }
 
 // UpdateTodo 更新待办任务

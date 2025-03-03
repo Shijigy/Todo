@@ -47,14 +47,22 @@ func (s *TodoService) CreateTodoService(ctx context.Context, todo models.Todo) (
 	return createdTodo, nil
 }
 
-// GetTodosService 获取所有待办任务
-func (s *TodoService) GetTodosService(ctx context.Context) ([]models.Todo, error) {
-	// 调用仓库层获取所有待办任务
-	todos, err := s.Repo.GetAllTodos(ctx) // 添加获取所有任务的方法
+func (s *TodoService) GetTodosService(ctx context.Context, userID string, updatedAt time.Time) ([]models.Todo, error) {
+	// 获取所有任务
+	todos, err := s.Repo.GetAllTodos(ctx)
 	if err != nil {
 		return nil, err
 	}
-	return todos, nil
+
+	// 根据 user_id 和 updated_at 过滤任务
+	var filteredTodos []models.Todo
+	for _, todo := range todos {
+		if todo.UserID == userID && (updatedAt.IsZero() || todo.UpdatedAt.After(updatedAt)) {
+			filteredTodos = append(filteredTodos, todo)
+		}
+	}
+
+	return filteredTodos, nil
 }
 
 // GetTodoService 根据标题获取待办任务

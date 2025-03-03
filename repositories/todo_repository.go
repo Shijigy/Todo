@@ -30,10 +30,11 @@ func NewTodoRepository(db *gorm.DB) TodoRepository {
 
 // CreateTodo 创建待办任务
 func (r *todoRepository) CreateTodo(ctx context.Context, todo *models.Todo) (*models.Todo, error) {
-	todo.CreatedAt = time.Now()
-	todo.UpdatedAt = time.Now()
+	if todo.UpdatedAt.IsZero() {
+		todo.UpdatedAt = time.Now() // 默认使用当前时间
+	}
 
-	// 在数据库中插入任务
+	// 保存 todo 到数据库
 	if err := r.db.Create(todo).Error; err != nil {
 		return nil, err
 	}
