@@ -14,7 +14,7 @@ type CommunityPost struct {
 	LikesCount int       `json:"likes_count" bson:"likes_count"` // 点赞数
 }
 
-// NewCommunityPost 创建社区动态
+/*// NewCommunityPost 创建社区动态
 func NewCommunityPost(userID, content, imageURL, tags string) *CommunityPost {
 	return &CommunityPost{
 		UserID:    userID,
@@ -24,7 +24,7 @@ func NewCommunityPost(userID, content, imageURL, tags string) *CommunityPost {
 		CreatedAt: time.Now(),
 		UpdatedAt: time.Now(),
 	}
-}
+}*/
 
 // Like 点赞模型
 type Like struct {
