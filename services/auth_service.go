@@ -3,8 +3,12 @@ package services
 import (
 	"ToDo/dao"
 	"ToDo/models"
+	"ToDo/utils"
+	"errors"
 	"fmt"
 	"golang.org/x/crypto/bcrypt"
+	"mime/multipart"
+	"net/http"
 )
 
 // UserRegister 用户的注册
@@ -35,7 +39,7 @@ func UserRegister(username string, password string, email string, code string, s
 		privateencode := password
 		password = privateencode
 		// 检查头像URL，如果没有传入则设置为默认头像
-		avatarURL := "content://media/picker/0/com.android.providers.media.photopicker/media/1000020703" // 默认头像URL
+		avatarURL := "http://ssjwo2ece.hn-bkt.clouddn.com/post-images/1741094306314528200_KIb9cH" // 默认头像URL
 		// 创建新用户
 		user := models.User{
 			Username:  username,
@@ -147,13 +151,9 @@ func ResetPassword(email string, password string) string {
 
 // DeactivateUser 停用用户并删除所有相关数据
 func DeactivateUser(userID string) error {
-	// 从数据库中删除用户数据
-	err := models.DeleteAUser(userID)
-	if err != nil {
-		return fmt.Errorf("删除用户数据失败: %v", err)
-	}
+
 	// 删除 likes 表中的相关数据
-	err = models.DeleteUserLikes(userID)
+	err := models.DeleteUserLikes(userID)
 	if err != nil {
 		return fmt.Errorf("删除用户的点赞数据失败: %v", err)
 	}
@@ -175,33 +175,41 @@ func DeactivateUser(userID string) error {
 	if err != nil {
 		return fmt.Errorf("删除用户的待办任务数据失败: %v", err)
 	}
+	// 从数据库中删除用户数据
+	err = models.DeleteAUser(userID)
+	if err != nil {
+		return fmt.Errorf("删除用户数据失败: %v", err)
+	}
 
 	return nil
 }
 
-// UpdateUserProfile 更新用户名和头像
-func UpdateUserProfile(userID string, newUsername string, newAvatarURL string) string {
-	// 第一步：验证用户是否存在
-	user, err := models.FindAUserByID(userID)
-	if err != nil {
-		return "用户不存在"
+// UpdateUserInfo 更新用户信息，包括用户名和头像
+func UpdateUserInfo(userID string, username string, avatarFile multipart.File, request *http.Request) (*models.User, error) {
+	// 查找用户
+	var user models.User
+	if err := dao.DB.Where("id = ?", userID).First(&user).Error; err != nil {
+		return nil, errors.New("user not found")
 	}
 
-	// 第二步：如果提供了新的用户名，则更新用户名
-	if newUsername != "" && newUsername != user.Username {
-		user.Username = newUsername
+	// 更新用户名，如果传入了用户名
+	if username != "" {
+		user.Username = username
 	}
 
-	// 第三步：如果提供了新的头像URL，则更新头像
-	if newAvatarURL != "" {
-		user.AvatarURL = newAvatarURL
+	// 处理头像文件上传
+	if avatarFile != nil {
+		avatarURL, err := utils.UploadImageToQiNiu(request)
+		if err != nil {
+			return nil, errors.New("failed to upload avatar")
+		}
+		user.AvatarURL = avatarURL
 	}
 
-	// 第四步：保存更新后的用户信息
-	err = models.UpdateUserProfile(user)
-	if err != nil {
-		return "更新个人信息失败"
+	// 保存更新后的用户信息
+	if err := dao.DB.Save(&user).Error; err != nil {
+		return nil, errors.New("failed to save user info")
 	}
 
-	return ""
+	return &user, nil
 }

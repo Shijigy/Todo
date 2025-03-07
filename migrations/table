@@ -51,6 +51,16 @@ CREATE TABLE `checkins` (
                             `checkin_count` INT DEFAULT 1,                       -- 打卡次数，默认为 1
                             `target_checkin_count` INT,                          -- 目标打卡次数，添加该字段
                             `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,    -- 创建时间，默认当前时间
-                            `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP, -- 更新时间，自动更新
+                            `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP, -- 更新时间，自动更新
                             FOREIGN KEY (`user_id`) REFERENCES `users`(`id`)     -- 外键关联到用户表的 id 字段
 );
+
+CREATE TABLE `comments` (
+                            `id` INT AUTO_INCREMENT PRIMARY KEY,                  -- 评论的唯一 ID
+                            `post_id` INT NOT NULL,                                -- 关联的动态 ID
+                            `user_id` INT NOT NULL,                                -- 评论的用户 ID
+                            `content` TEXT NOT NULL,                               -- 评论内容
+                            `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,      -- 评论时间
+                            FOREIGN KEY (`post_id`) REFERENCES `community_posts`(`id`) ON DELETE CASCADE, -- 关联到动态表
+                            FOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON DELETE CASCADE             -- 关联到用户表
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

@@ -3,16 +3,9 @@ package controllers
 import (
 	"ToDo/models"
 	"ToDo/services"
+	"ToDo/utils"
 	"encoding/json"
-	"fmt"
-	"github.com/qiniu/go-sdk/v7/auth/qbox"
-	"github.com/qiniu/go-sdk/v7/storage"
-	"io"
-	"math/rand"
 	"net/http"
-	"os"
-	"strings"
-	"time"
 )
 
 func CreatePost(w http.ResponseWriter, r *http.Request, service services.CommunityService) {
@@ -46,7 +39,7 @@ func CreatePost(w http.ResponseWriter, r *http.Request, service services.Communi
 	// 检查是否上传了图片文件
 	if file, _, err := r.FormFile("file"); err == nil && file != nil {
 		// 上传图片到七牛云
-		imageURL, err := uploadImageToQiNiu(r)
+		imageURL, err := utils.UploadImageToQiNiu(r)
 		if err != nil {
 			// 返回上传图片的错误
 			w.Header().Set("Content-Type", "application/json")
@@ -75,90 +68,7 @@ func CreatePost(w http.ResponseWriter, r *http.Request, service services.Communi
 	json.NewEncoder(w).Encode(models.Response{Message: "Post created successfully", Data: createdPost})
 }
 
-func uploadImageToQiNiu(r *http.Request) (string, error) {
-	// 获取七牛云的上传凭证和上传目录
-	accessKey := "D3BspotCT7UQRJx0q8GaznFvHTPJ-AVQC_IFPmjv"
-	secretKey := "t0Ys1TnexpaiaOQLVMeeubyBH0HOvtkLq1SlHXVp"
-	bucket := "todo22"
-
-	// 获取上传文件
-	file, _, err := r.FormFile("file")
-	if err != nil {
-		return "", err
-	}
-	defer file.Close()
-
-	// 创建临时文件
-	tmpFile, err := os.CreateTemp("", "upload_")
-	if err != nil {
-		return "", err
-	}
-	defer os.Remove(tmpFile.Name())
-
-	// 将multipart.File的内容写入到临时文件
-	_, err = io.Copy(tmpFile, file)
-	if err != nil {
-		return "", err
-	}
-
-	// 获取文件的大小
-	fileStat, err := tmpFile.Stat()
-	if err != nil {
-		return "", err
-	}
-	fileSize := fileStat.Size() // 获取文件大小，返回 int64
-
-	// 七牛云上传凭证
-	mac := qbox.NewMac(accessKey, secretKey)
-	putPolicy := storage.PutPolicy{
-		Scope: bucket,
-	}
-	upToken := putPolicy.UploadToken(mac)
-
-	// 设置上传配置
-	cfg := storage.Config{
-		UseHTTPS:      false,
-		UseCdnDomains: false,
-	}
-	formUploader := storage.NewFormUploader(&cfg)
-
-	// 获取 Gin 请求的 context
-	ctx := r.Context()
-
-	// 上传文件到七牛云
-	fileKey := fmt.Sprintf("post-images/%s", generateFileName()) // 生成文件名
-	ret := storage.PutRet{}
-	err = formUploader.Put(ctx, &ret, upToken, fileKey, tmpFile, fileSize, nil)
-	if err != nil {
-		return "", err
-	}
-
-	// 返回文件的 URL
-	fileURL := fmt.Sprintf("http://%s/%s", "ssjwo2ece.hn-bkt.clouddn.com", ret.Key)
-	return fileURL, nil
-}
-
-// generateFileName 生成一个唯一的文件名
-func generateFileName() string {
-	// 获取当前时间戳
-	timestamp := time.Now().UnixNano()
-
-	// 生成一个随机字符串
-	rand.Seed(time.Now().UnixNano())
-	const charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
-	length := 6
-	var randomString strings.Builder
-	for i := 0; i < length; i++ {
-		randomString.WriteByte(charset[rand.Intn(len(charset))])
-	}
-
-	// 组合时间戳和随机字符串作为文件名
-	fileName := fmt.Sprintf("%d_%s", timestamp, randomString.String())
-
-	return fileName
-}
-
-// GetPosts 获取社区动态列表，支持分页、筛选、排序
+// GetPosts 获取指定用户社区动态列表，支持分页、筛选、排序
 func GetPosts(w http.ResponseWriter, r *http.Request, service services.CommunityService) {
 	// 获取查询参数
 	page := r.URL.Query().Get("page")
@@ -183,7 +93,38 @@ func GetPosts(w http.ResponseWriter, r *http.Request, service services.Community
 	}
 
 	// 调用服务层获取符合条件的社区帖子，仅根据 user_id 进行筛选
-	posts, err := service.GetCommunityPostsService(r.Context(), service.Repo, page, limit, "", userID, sort)
+	posts, err := service.GetCommunityPostsByUserIDService(r.Context(), service.Repo, page, limit, "", userID, sort)
+	if err != nil {
+		// 返回错误信息，格式化为 JSON
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(models.Response{Error: err.Error()})
+		return
+	}
+
+	// 成功获取社区帖子，返回 200 状态码和响应数据
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(models.Response{Message: "Posts retrieved successfully", Data: posts})
+}
+
+// GetAllPosts 获取所有社区动态
+func GetAllPosts(w http.ResponseWriter, r *http.Request, service services.CommunityService) {
+	// 获取查询参数
+	page := r.URL.Query().Get("page")
+	limit := r.URL.Query().Get("limit")
+	sort := r.URL.Query().Get("sort") // 排序方式，默认为时间降序
+
+	// 设置默认分页值
+	if page == "" {
+		page = "1"
+	}
+	if limit == "" {
+		limit = "10"
+	}
+
+	// 调用服务层获取所有社区帖子
+	posts, err := service.GetAllCommunityPostsService(r.Context(), service.Repo, page, limit, sort)
 	if err != nil {
 		// 返回错误信息，格式化为 JSON
 		w.Header().Set("Content-Type", "application/json")
@@ -327,4 +268,88 @@ func GetLikesCount(w http.ResponseWriter, r *http.Request, service services.Comm
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(models.Response{Message: "Likes count retrieved successfully", Data: map[string]int{"likes_count": likesCount}})
+}
+
+// CreateComment 处理发布评论的请求
+func CreateComment(w http.ResponseWriter, r *http.Request, service services.CommunityService) {
+	var comment models.Comment
+
+	// 解析 JSON 数据
+	err := json.NewDecoder(r.Body).Decode(&comment)
+	if err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(models.Response{Error: "Failed to parse comment data"})
+		return
+	}
+
+	// 调用服务层处理评论创建，并获取用户信息
+	createdComment, username, avatarURL, err := service.CreateCommentService(r.Context(), comment)
+	if err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(models.Response{Error: err.Error()})
+		return
+	}
+
+	// 返回成功信息和详细数据
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
+	json.NewEncoder(w).Encode(models.Response{
+		Message: "Comment created successfully",
+		Data: map[string]interface{}{
+			"post_id":    createdComment.PostID,
+			"user_id":    createdComment.UserID,
+			"username":   username,
+			"avatar_url": avatarURL,
+			"content":    createdComment.Content,
+			"created_at": createdComment.CreatedAt,
+		},
+	})
+}
+
+// DeleteComment 处理删除评论的请求
+func DeleteComment(w http.ResponseWriter, r *http.Request, service services.CommunityService) {
+	// 从 URL 查询参数中获取评论 ID
+	commentID := r.URL.Query().Get("comment_id")
+	if commentID == "" {
+		// 如果没有传递 comment_id 参数，返回错误
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(models.Response{Error: "comment_id is required"})
+		return
+	}
+
+	// 调用服务层删除评论
+	err := service.DeleteCommentService(r.Context(), commentID)
+	if err != nil {
+		// 如果服务层删除评论失败，返回 500 错误
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(models.Response{Error: err.Error()})
+		return
+	}
+
+	// 如果删除成功，返回成功消息
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(models.Response{Message: "Comment deleted successfully"})
+}
+
+func GetComments(w http.ResponseWriter, r *http.Request, service services.CommunityService) {
+	postID := r.URL.Query().Get("post_id")
+
+	// 获取评论列表（包含用户信息）
+	comments, err := service.GetCommentsService(r.Context(), postID)
+	if err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(models.Response{Error: err.Error()})
+		return
+	}
+
+	// 返回评论列表
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(models.Response{Message: "Comments fetched successfully", Data: comments})
 }

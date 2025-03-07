@@ -4,6 +4,7 @@ import (
 	"ToDo/models"
 	"context"
 	"fmt"
+	"strconv"
 	"time"
 
 	"github.com/jinzhu/gorm"
@@ -19,6 +20,9 @@ type CommunityRepository interface {
 	DecrementLikesCount(ctx context.Context, postID string) error
 	DeletePost(ctx context.Context, id string) error
 	GetLikesCount(ctx context.Context, postID string) (int, error)
+	CreateComment(ctx context.Context, comment *models.Comment) (*models.Comment, error)
+	DeleteComment(ctx context.Context, commentID string) error
+	GetCommentsByPostID(ctx context.Context, postID string) ([]models.Comment, error)
 }
 
 // 社区仓库实现
@@ -180,4 +184,39 @@ func (r *communityRepository) GetLikesCount(ctx context.Context, postID string) 
 		return 0, err
 	}
 	return count, nil
+}
+
+// CreateComment 创建评论
+func (r *communityRepository) CreateComment(ctx context.Context, comment *models.Comment) (*models.Comment, error) {
+	err := r.db.Create(comment).Error
+	if err != nil {
+		return nil, err
+	}
+	return comment, nil
+}
+
+// DeleteComment 删除评论
+func (r *communityRepository) DeleteComment(ctx context.Context, commentID string) error {
+	// 将 commentID 字符串转换为 int 类型
+	id, err := strconv.Atoi(commentID) // commentID 从 string 转为 int
+	if err != nil {
+		return fmt.Errorf("invalid commentID format: %v", err)
+	}
+
+	// 使用 GORM 删除评论
+	err = r.db.Where("id = ?", id).Delete(&models.Comment{}).Error
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+// GetCommentsByPostID 获取指定动态的所有评论
+func (r *communityRepository) GetCommentsByPostID(ctx context.Context, postID string) ([]models.Comment, error) {
+	var comments []models.Comment
+	err := r.db.Where("post_id = ?", postID).Find(&comments).Error
+	if err != nil {
+		return nil, err
+	}
+	return comments, nil
 }

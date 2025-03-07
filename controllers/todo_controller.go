@@ -142,7 +142,7 @@ func DeleteTodo(c *gin.Context, todoService services.TodoService) {
 // MarkTodoAsCompleted 标记任务为已完成
 func MarkTodoAsCompleted(c *gin.Context, todoService services.TodoService) {
 	var request struct {
-		Title string `json:"title"`
+		ID string `json:"id"` // 根据 ID 查找任务
 	}
 
 	// 使用 ShouldBind 来解析请求体
@@ -153,7 +153,7 @@ func MarkTodoAsCompleted(c *gin.Context, todoService services.TodoService) {
 
 	// 传递 context 到服务层
 	ctx := c.Request.Context()
-	updatedTodo, err := todoService.MarkTodoAsCompletedService(ctx, request.Title)
+	updatedTodo, err := todoService.MarkTodoAsCompletedService(ctx, request.ID)
 	if err != nil {
 		c.JSON(http.StatusNotFound, models.Response{Error: err.Error()})
 		return

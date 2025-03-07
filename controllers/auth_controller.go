@@ -10,8 +10,7 @@ import (
 	"github.com/gin-gonic/gin"
 	_ "github.com/go-redis/redis/v8"
 	"golang.org/x/crypto/bcrypt"
-	"image"
-	"mime/multipart"
+	"log"
 	"net/http"
 	"strconv"
 	"time"
@@ -304,10 +303,8 @@ func DeactivateAccount(c *gin.Context) {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "密码验证失败"})
 		return
 	}
-	if requestData.Password != user.Password {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "密码验证失败"})
-		return
-	}
+	fmt.Println("Stored Password: ", user.Password)
+	fmt.Println("Input Password: ", requestData.Password)
 
 	// 用户验证通过，删除用户数据
 	err = services.DeactivateUser(user.ID) // 通过 user.ID 删除用户数据
@@ -319,7 +316,7 @@ func DeactivateAccount(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "账户已成功注销"})
 }
 
-// isValidImage 验证图片类型和大小
+/*// isValidImage 验证图片类型和大小
 func isValidImage(file *multipart.FileHeader) bool {
 	// 打开文件读取
 	f, err := file.Open()
@@ -341,34 +338,39 @@ func isValidImage(file *multipart.FileHeader) bool {
 	}
 
 	return true
-}
+}*/
 
-// UpdateProfile 处理更新用户名和头像请求
-func UpdateProfile(c *gin.Context) {
-	// 1. 获取登录用户的ID
-	userID, exists := c.Get("user_id") // 假设在用户登录后，用户ID存储在上下文中
-	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "用户未登录"})
+// UpdateUserInfoController 处理更新用户信息的请求
+func UpdateUserInfoController(c *gin.Context) {
+	// 获取用户ID
+	userID := c.DefaultPostForm("id", "")
+	if userID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "User ID is required"})
 		return
 	}
 
-	var requestData struct {
-		Username  string `json:"username"`
-		AvatarURL string `json:"avatar_url"`
-	}
+	// 获取用户名
+	username := c.DefaultPostForm("username", "")
 
-	// 2. 绑定请求数据
-	if err := c.ShouldBindJSON(&requestData); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "无效的请求数据"})
+	// 获取头像文件
+	avatarFile, _, err := c.Request.FormFile("file")
+	if err != nil && avatarFile != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Avatar file is required"})
 		return
 	}
 
-	// 3. 调用服务层函数来更新用户名和头像
-	result := services.UpdateUserProfile(userID.(string), requestData.Username, requestData.AvatarURL)
-
-	if result == "" {
-		c.JSON(http.StatusOK, gin.H{"message": "个人信息更新成功"})
-	} else {
-		c.JSON(http.StatusBadRequest, gin.H{"error": result})
+	// 调用 service 层更新用户信息
+	user, err := services.UpdateUserInfo(userID, username, avatarFile, c.Request)
+	if err != nil {
+		log.Println("Error updating user info:", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update user info"})
+		return
 	}
+
+	// 返回更新后的用户信息
+	c.JSON(http.StatusOK, gin.H{
+		"id":         user.ID,
+		"username":   user.Username,
+		"avatar_url": user.AvatarURL,
+	})
 }

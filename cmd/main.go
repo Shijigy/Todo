@@ -3,7 +3,6 @@ package main
 import (
 	"ToDo/controllers"
 	"ToDo/dao"
-	"ToDo/middlewares"
 	"ToDo/repositories"
 	"ToDo/services"
 	"github.com/gin-contrib/sessions"
@@ -90,7 +89,7 @@ func main() {
 	// 注销账号
 	r.POST("/deactivate", controllers.DeactivateAccount)
 	// 更新用户名和头像
-	r.PUT("/profile", middlewares.AuthMiddleware(), controllers.UpdateProfile)
+	r.PUT("/profile", controllers.UpdateUserInfoController)
 
 	// Todo 路由
 	// 创建任务
@@ -139,7 +138,10 @@ func main() {
 	r.GET("/community/list", func(c *gin.Context) {
 		controllers.GetPosts(c.Writer, c.Request, communityService)
 	})
-	r.DELETE("/community/post", func(c *gin.Context) {
+	r.GET("/community/all-list", func(c *gin.Context) {
+		controllers.GetAllPosts(c.Writer, c.Request, communityService)
+	})
+	r.DELETE("/community/del-post", func(c *gin.Context) {
 		controllers.DeletePost(c.Writer, c.Request, communityService)
 	})
 	r.POST("/community/like", func(c *gin.Context) {
@@ -150,6 +152,15 @@ func main() {
 	})
 	r.GET("/community/post/likes", func(c *gin.Context) {
 		controllers.GetLikesCount(c.Writer, c.Request, communityService)
+	})
+	r.POST("/comment", func(c *gin.Context) {
+		controllers.CreateComment(c.Writer, c.Request, communityService)
+	})
+	r.DELETE("/del-comments", func(c *gin.Context) {
+		controllers.DeleteComment(c.Writer, c.Request, communityService)
+	})
+	r.GET("/comments", func(c *gin.Context) {
+		controllers.GetComments(c.Writer, c.Request, communityService)
 	})
 
 	// 启动 HTTP 服务并监听端口

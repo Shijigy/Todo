@@ -79,7 +79,6 @@ func (r *todoRepository) GetTodoByTitle(ctx context.Context, title string) (*mod
 
 // UpdateTodoStatus 更新待办任务状态
 func (r *todoRepository) UpdateTodoStatus(ctx context.Context, todo *models.Todo) error {
-	todo.UpdatedAt = time.Now()
 	// 更新任务
 	if err := r.db.Save(todo).Error; err != nil {
 		return err
