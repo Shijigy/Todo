@@ -23,12 +23,24 @@ func CreateTodo(w http.ResponseWriter, r *http.Request, todoService services.Tod
 	}
 
 	// 解析 updated_at 字符串为 time.Time
-	if todo.UpdatedAt.IsZero() {
+	if todo.UpdatedAt == "" {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(models.Response{Error: "UpdatedAt is required"})
 		return
 	}
+
+	// 如果 UpdatedAt 字符串为空，可以设置为当前时间
+	parsedUpdatedAt, err := time.Parse("2006-01-02", todo.UpdatedAt)
+	if err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(models.Response{Error: "Invalid updated_at format, expected YYYY-MM-DD"})
+		return
+	}
+
+	// 将 parsedUpdatedAt 转换回字符串类型
+	todo.UpdatedAt = parsedUpdatedAt.Format("2006-01-02")
 
 	// 离线模式
 	if isOffline {
@@ -77,16 +89,19 @@ func GetTodos(w http.ResponseWriter, r *http.Request, todoService services.TodoS
 		if err != nil {
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusBadRequest)
-			json.NewEncoder(w).Encode(models.Response{Error: "无效的 updated_at 格式，预期为 YYYY-MM-DD"})
+			json.NewEncoder(w).Encode(models.Response{Error: "Invalid updated_at format, expected YYYY-MM-DD"})
 			return
 		}
 		// 设置时间为00:00:00，确保只比对日期部分
 		updatedAt = updatedAt.Add(time.Hour * 24 * 0) // 将时间设置为午夜（00:00:00），忽略时间
 	}
 
+	// 将 updatedAt 转换为字符串
+	updatedAtFormatted := updatedAt.Format("2006-01-02")
+
 	// 传递 context 到服务层
 	ctx := r.Context()
-	todos, err := todoService.GetTodosService(ctx, userID, updatedAt)
+	todos, err := todoService.GetTodosService(ctx, userID, updatedAtFormatted)
 	if err != nil {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusInternalServerError)
@@ -96,7 +111,7 @@ func GetTodos(w http.ResponseWriter, r *http.Request, todoService services.TodoS
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(models.Response{Message: "任务获取成功", Data: todos})
+	json.NewEncoder(w).Encode(models.Response{Message: "Tasks retrieved successfully", Data: todos})
 }
 
 // UpdateTodo 更新待办任务

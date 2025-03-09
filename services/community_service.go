@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
-	"time"
 )
 
 type CommunityService struct {
@@ -74,21 +73,21 @@ func (s CommunityService) GetAllCommunityPostsService(ctx context.Context, repo 
 		limitInt = 10
 	}
 
-	//offset := (pageInt - 1) * limitInt
-
 	// 调用仓库方法获取所有社区帖子
 	posts, err := repo.GetAllPosts(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	/*// 对获取的帖子进行排序（根据需求可以调整）
-	if sort == "desc" {
-		// 排序方式：按时间降序
-		// 可以在这里实现排序逻辑（如果需要的话）
-	} else {
-		// 默认升序或其他排序逻辑
-	}*/
+	// 获取评论数量
+	for i, post := range posts {
+		commentCount, err := repo.GetCommentsCountByPostID(ctx, post.ID)
+		if err != nil {
+			return nil, err
+		}
+		// 将评论数量加入每个动态中
+		posts[i].CommentCount = commentCount
+	}
 
 	// 返回社区动态内容
 	return posts, nil
@@ -166,26 +165,6 @@ func (s *CommunityService) GetLikesCountService(ctx context.Context, postID stri
 	return likesCount, nil
 }
 
-func (s CommunityService) CreateCommentService(ctx context.Context, comment models.Comment) (*models.Comment, string, string, error) {
-	// 设置评论的创建时间
-	comment.CreatedAt = time.Now()
-
-	// 调用仓库层创建评论
-	createdComment, err := s.Repo.CreateComment(ctx, &comment)
-	if err != nil {
-		return nil, "", "", err
-	}
-
-	// 在 Service 层获取用户信息（用户名和头像 URL）
-	user, err := s.GetUserByID(ctx, createdComment.UserID)
-	if err != nil {
-		return nil, "", "", err
-	}
-
-	// 返回评论信息以及用户的头像和用户名
-	return createdComment, user.Username, user.AvatarURL, nil
-}
-
 // GetUserByID 方法：查询用户信息
 func (s CommunityService) GetUserByID(ctx context.Context, userID string) (*models.User, error) {
 	// 假设通过仓库层查询用户信息
@@ -196,9 +175,20 @@ func (s CommunityService) GetUserByID(ctx context.Context, userID string) (*mode
 	return user, nil
 }
 
-// DeleteCommentService 删除评论
+// 这个函数返回一个创建的评论对象和可能的错误
+func (s CommunityService) CreateCommentService(ctx context.Context, comment models.Comment) (*models.Comment, error) {
+	// 假设此处有评论创建的逻辑
+	createdComment, err := s.Repo.CreateComment(ctx, &comment)
+	if err != nil {
+		return nil, err
+	}
+
+	return createdComment, nil
+}
+
+// DeleteCommentService 删除评论并更新评论数
 func (s CommunityService) DeleteCommentService(ctx context.Context, commentID string) error {
-	// 调用仓库层删除评论
+	// 删除评论
 	err := s.Repo.DeleteComment(ctx, commentID)
 	if err != nil {
 		return err
@@ -230,4 +220,20 @@ func (s CommunityService) GetCommentsService(ctx context.Context, postID string)
 	}
 
 	return commentsWithUser, nil
+}
+
+// CheckLikeStatusService 判断用户是否点赞了帖子
+func (s *CommunityService) CheckLikeStatusService(ctx context.Context, userID, postID string) (int, error) {
+	// 检查点赞记录是否存在
+	liked, err := s.LikeRepo.CheckLikeExist(ctx, userID, postID)
+	if err != nil {
+		return 0, err
+	}
+
+	// 如果用户已经点赞，返回 1，否则返回 0
+	if liked {
+		return 1, nil
+	}
+
+	return 0, nil
 }

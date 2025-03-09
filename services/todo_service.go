@@ -47,7 +47,7 @@ func (s *TodoService) CreateTodoService(ctx context.Context, todo models.Todo) (
 	return createdTodo, nil
 }
 
-func (s *TodoService) GetTodosService(ctx context.Context, userID string, updatedAt time.Time) ([]models.Todo, error) {
+func (s *TodoService) GetTodosService(ctx context.Context, userID string, updatedAt string) ([]models.Todo, error) {
 	// 获取所有任务
 	todos, err := s.Repo.GetAllTodos(ctx)
 	if err != nil {
@@ -57,7 +57,7 @@ func (s *TodoService) GetTodosService(ctx context.Context, userID string, update
 	// 根据 user_id 和 updated_at 过滤任务
 	var filteredTodos []models.Todo
 	for _, todo := range todos {
-		if todo.UserID == userID && (updatedAt.IsZero() || todo.UpdatedAt.After(updatedAt)) {
+		if todo.UserID == userID && (updatedAt == "" || todo.UpdatedAt > updatedAt) {
 			filteredTodos = append(filteredTodos, todo)
 		}
 	}
@@ -66,19 +66,18 @@ func (s *TodoService) GetTodosService(ctx context.Context, userID string, update
 }
 
 // GetTodoService 根据标题获取待办任务
-func (s *TodoService) GetTodoService(ctx context.Context, tittle string) (*models.Todo, error) {
-	if tittle == "" {
+func (s *TodoService) GetTodoService(ctx context.Context, title string) (*models.Todo, error) {
+	if title == "" {
 		return nil, errors.New("todo title cannot be empty")
 	}
 
-	todo, err := s.Repo.GetTodoByID(ctx, tittle)
+	todo, err := s.Repo.GetTodoByTitle(ctx, title)
 	if err != nil {
 		return nil, err
 	}
 	return todo, nil
 }
 
-// UpdateTodoStatusService 更新任务状态
 func (s *TodoService) UpdateTodoStatusService(ctx context.Context, id string, todo models.Todo) error {
 	if id == "" {
 		return errors.New("ID cannot be empty")
@@ -89,17 +88,18 @@ func (s *TodoService) UpdateTodoStatusService(ctx context.Context, id string, to
 	if err != nil {
 		return errors.New("todo not found")
 	}
+
 	// 检查 existingTodo 是否为 nil
 	if existingTodo == nil {
 		return errors.New("todo not found, existingTodo is nil")
 	}
 
-	// 如果传入了 updated_at 字段，则保留传入的值，而不是修改为当前时间
-	if !todo.UpdatedAt.IsZero() {
-		existingTodo.UpdatedAt = todo.UpdatedAt // 保持传入的 updated_at 时间
+	// 只有在传入的 todo 中包含 non-zero 的 UpdatedAt 字段时，才更新 UpdatedAt
+	if todo.UpdatedAt != "" {
+		existingTodo.UpdatedAt = todo.UpdatedAt // 使用传入的时间
 	}
 
-	// 更新其他字段
+	// 更新其他字段（只有非空值才会更新）
 	if todo.Status != "" {
 		existingTodo.Status = todo.Status
 	}
@@ -114,14 +114,10 @@ func (s *TodoService) UpdateTodoStatusService(ctx context.Context, id string, to
 	return s.Repo.UpdateTodoStatus(ctx, existingTodo)
 }
 
-// DeleteTodoService 删除任务
-func (s *TodoService) DeleteTodoService(ctx context.Context, id string) error {
-	if id == "" {
-		return errors.New("ID cannot be empty")
-	}
-
-	// 删除任务
-	return s.Repo.DeleteTodoByID(ctx, id) // 根据ID删除任务
+// DeleteTodoService 删除待办任务
+func (s *TodoService) DeleteTodoService(ctx context.Context, todoID string) error {
+	err := s.Repo.DeleteTodoByID(ctx, todoID)
+	return err
 }
 
 // SyncOfflineTodos 同步离线任务到数据库
@@ -130,6 +126,11 @@ func (s *TodoService) SyncOfflineTodos() error {
 	defer s.mu.Unlock()
 
 	for _, todo := range s.OfflineTodos {
+		// 如果 `UpdatedAt` 字段是空的，设置为当前时间字符串
+		if todo.UpdatedAt == "" {
+			todo.UpdatedAt = time.Now().Format("2006-01-02 15:04:05")
+		}
+
 		// 将离线任务同步到数据库
 		_, err := s.Repo.CreateTodo(context.Background(), &todo)
 		if err != nil {
@@ -157,7 +158,8 @@ func (s *TodoService) MarkTodoAsCompletedService(ctx context.Context, id string)
 
 	// 更新任务状态为 completed
 	existingTodo.Status = "completed"
-	existingTodo.UpdatedAt = time.Now() // 更新时间戳
+	// 更新时间戳为当前时间字符串
+	existingTodo.UpdatedAt = time.Now().Format("2006-01-02 15:04:05")
 
 	// 保存更新后的任务
 	err = s.Repo.UpdateTodoStatus(ctx, existingTodo)

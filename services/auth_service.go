@@ -158,6 +158,12 @@ func DeactivateUser(userID string) error {
 		return fmt.Errorf("删除用户的点赞数据失败: %v", err)
 	}
 
+	// 删除 comments 表中的相关数据
+	err = models.DeleteUserComments(userID)
+	if err != nil {
+		return fmt.Errorf("删除用户的评论数据失败: %v", err)
+	}
+
 	// 删除 community_posts 表中的相关数据
 	err = models.DeleteUserCommunityPosts(userID)
 	if err != nil {

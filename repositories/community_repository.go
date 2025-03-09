@@ -4,7 +4,6 @@ import (
 	"ToDo/models"
 	"context"
 	"fmt"
-	"strconv"
 	"time"
 
 	"github.com/jinzhu/gorm"
@@ -23,6 +22,7 @@ type CommunityRepository interface {
 	CreateComment(ctx context.Context, comment *models.Comment) (*models.Comment, error)
 	DeleteComment(ctx context.Context, commentID string) error
 	GetCommentsByPostID(ctx context.Context, postID string) ([]models.Comment, error)
+	GetCommentsCountByPostID(ctx context.Context, postID int) (int, error)
 }
 
 // 社区仓库实现
@@ -118,6 +118,19 @@ func (r *communityRepository) GetFilteredPosts(ctx context.Context, tags, userID
 
 // DeletePost 删除社区动态
 func (r *communityRepository) DeletePost(ctx context.Context, id string) error {
+	// 删除关联的点赞记录
+	err := r.db.Where("post_id = ?", id).Delete(&models.Like{}).Error
+	if err != nil {
+		return fmt.Errorf("删除动态的点赞记录失败: %v", err)
+	}
+
+	// 删除关联的评论记录
+	err = r.db.Where("post_id = ?", id).Delete(&models.Comment{}).Error
+	if err != nil {
+		return fmt.Errorf("删除动态的评论记录失败: %v", err)
+	}
+
+	// 删除社区动态
 	if err := r.db.Where("id = ?", id).Delete(&models.CommunityPost{}).Error; err != nil {
 		return err
 	}
@@ -186,26 +199,59 @@ func (r *communityRepository) GetLikesCount(ctx context.Context, postID string) 
 	return count, nil
 }
 
-// CreateComment 创建评论
+// CreateComment 创建评论并更新对应动态的评论数
 func (r *communityRepository) CreateComment(ctx context.Context, comment *models.Comment) (*models.Comment, error) {
-	err := r.db.Create(comment).Error
+	// 1. 创建评论
+	if err := r.db.Create(&comment).Error; err != nil {
+		return nil, err
+	}
+
+	// 2. 更新评论数量
+	err := r.IncrementCommentCount(ctx, comment.PostID)
 	if err != nil {
 		return nil, err
 	}
+
 	return comment, nil
 }
 
-// DeleteComment 删除评论
+// DeleteComment 删除评论并更新对应动态的评论数
 func (r *communityRepository) DeleteComment(ctx context.Context, commentID string) error {
-	// 将 commentID 字符串转换为 int 类型
-	id, err := strconv.Atoi(commentID) // commentID 从 string 转为 int
-	if err != nil {
-		return fmt.Errorf("invalid commentID format: %v", err)
+	// 1. 获取评论信息
+	var comment models.Comment
+	if err := r.db.Where("id = ?", commentID).First(&comment).Error; err != nil {
+		return err
 	}
 
-	// 使用 GORM 删除评论
-	err = r.db.Where("id = ?", id).Delete(&models.Comment{}).Error
+	// 2. 删除评论
+	if err := r.db.Delete(&comment).Error; err != nil {
+		return err
+	}
+
+	// 3. 更新评论数量
+	err := r.DecrementCommentCount(ctx, comment.PostID)
 	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// IncrementCommentCount 增加评论数
+func (r *communityRepository) IncrementCommentCount(ctx context.Context, postID int) error {
+	if err := r.db.Model(&models.CommunityPost{}).
+		Where("id = ?", postID).
+		UpdateColumn("comment_count", gorm.Expr("comment_count + ?", 1)).Error; err != nil {
+		return err
+	}
+	return nil
+}
+
+// DecrementCommentCount 减少评论数
+func (r *communityRepository) DecrementCommentCount(ctx context.Context, postID int) error {
+	if err := r.db.Model(&models.CommunityPost{}).
+		Where("id = ?", postID).
+		UpdateColumn("comment_count", gorm.Expr("comment_count - ?", 1)).Error; err != nil {
 		return err
 	}
 	return nil
@@ -219,4 +265,13 @@ func (r *communityRepository) GetCommentsByPostID(ctx context.Context, postID st
 		return nil, err
 	}
 	return comments, nil
+}
+
+// GetCommentsCountByPostID 获取某个帖子下的评论数量
+func (r *communityRepository) GetCommentsCountByPostID(ctx context.Context, postID int) (int, error) {
+	var count int
+	if err := r.db.Model(&models.Comment{}).Where("post_id = ?", postID).Count(&count).Error; err != nil {
+		return 0, err
+	}
+	return count, nil
 }

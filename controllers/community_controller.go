@@ -52,6 +52,8 @@ func CreatePost(w http.ResponseWriter, r *http.Request, service services.Communi
 		post.ImageURL = imageURL
 	}
 
+	post.CommentCount = 0
+
 	// 调用服务层创建社区帖子
 	createdPost, err := service.CreateCommunityPostService(r.Context(), post, service.Repo)
 	if err != nil {
@@ -270,42 +272,104 @@ func GetLikesCount(w http.ResponseWriter, r *http.Request, service services.Comm
 	json.NewEncoder(w).Encode(models.Response{Message: "Likes count retrieved successfully", Data: map[string]int{"likes_count": likesCount}})
 }
 
-// CreateComment 处理发布评论的请求
-func CreateComment(w http.ResponseWriter, r *http.Request, service services.CommunityService) {
-	var comment models.Comment
+// CheckLikeStatus 检查用户是否点赞动态
+func CheckLikeStatus(w http.ResponseWriter, r *http.Request, service services.CommunityService) {
+	var requestBody struct {
+		UserID string `json:"user_id"`
+		PostID string `json:"post_id"`
+	}
 
-	// 解析 JSON 数据
-	err := json.NewDecoder(r.Body).Decode(&comment)
-	if err != nil {
+	// 解析请求体中的数据
+	if err := json.NewDecoder(r.Body).Decode(&requestBody); err != nil {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(models.Response{Error: "Failed to parse comment data"})
+		json.NewEncoder(w).Encode(models.Response{Error: "Invalid input"})
 		return
 	}
 
-	// 调用服务层处理评论创建，并获取用户信息
-	createdComment, username, avatarURL, err := service.CreateCommentService(r.Context(), comment)
+	// 校验 UserID 和 PostID 是否有效
+	if requestBody.UserID == "" || requestBody.PostID == "" {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(models.Response{Error: "UserID and PostID are required"})
+		return
+	}
+
+	// 调用服务层的 CheckLikeStatusService 处理点赞状态
+	status, err := service.CheckLikeStatusService(r.Context(), requestBody.UserID, requestBody.PostID)
 	if err != nil {
+		// 如果出错，返回错误信息
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusInternalServerError)
 		json.NewEncoder(w).Encode(models.Response{Error: err.Error()})
 		return
 	}
 
-	// 返回成功信息和详细数据
+	// 返回点赞状态
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(models.Response{Message: "Like status fetched successfully", Data: status})
+}
+
+// CreateComment 处理发布评论的请求
+func CreateComment(w http.ResponseWriter, r *http.Request, service services.CommunityService) {
+	var post models.CommunityPost
+
+	// 解析 multipart/form-data 数据
+	err := r.ParseMultipartForm(10 << 20) // 10 MB
+	if err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(models.Response{Error: "Failed to parse form data"})
+		return
+	}
+
+	// 从表单中获取 user_id 和 content 字段
+	userID := r.FormValue("user_id")
+	content := r.FormValue("content")
+
+	// 确保 user_id 和 content 是有效的
+	if userID == "" || content == "" {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(models.Response{Error: "user_id and content are required"})
+		return
+	}
+
+	// 设置 post 的 user_id 和 content
+	post.UserID = userID
+	post.Content = content
+
+	// 检查是否上传了图片文件
+	if file, _, err := r.FormFile("file"); err == nil && file != nil {
+		// 上传图片到七牛云
+		imageURL, err := utils.UploadImageToQiNiu(r)
+		if err != nil {
+			// 返回上传图片的错误
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusInternalServerError)
+			json.NewEncoder(w).Encode(models.Response{Error: "Failed to upload image"})
+			return
+		}
+
+		// 将图片链接赋值给 post.ImageURL
+		post.ImageURL = imageURL
+	}
+
+	// 调用服务层创建社区帖子
+	createdPost, err := service.CreateCommunityPostService(r.Context(), post, service.Repo)
+	if err != nil {
+		// 返回服务层错误信息，格式化为 JSON
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(models.Response{Error: err.Error()})
+		return
+	}
+
+	// 成功创建社区帖子，返回 201 状态码和响应信息
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(models.Response{
-		Message: "Comment created successfully",
-		Data: map[string]interface{}{
-			"post_id":    createdComment.PostID,
-			"user_id":    createdComment.UserID,
-			"username":   username,
-			"avatar_url": avatarURL,
-			"content":    createdComment.Content,
-			"created_at": createdComment.CreatedAt,
-		},
-	})
+	json.NewEncoder(w).Encode(models.Response{Message: "Post created successfully", Data: createdPost})
 }
 
 // DeleteComment 处理删除评论的请求

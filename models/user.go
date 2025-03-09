@@ -182,3 +182,13 @@ func DeleteUserTodos(userID string) error {
 	}
 	return nil
 }
+
+// DeleteUserComments 删除用户的评论记录
+func DeleteUserComments(userID string) error {
+	// 删除该用户的所有评论记录
+	err := dao.DB.Table("comments").Where("user_id = ?", userID).Delete(&Comment{}).Error
+	if err != nil {
+		return fmt.Errorf("删除评论记录失败: %v", err)
+	}
+	return nil
+}

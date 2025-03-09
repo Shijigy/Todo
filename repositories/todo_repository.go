@@ -3,9 +3,8 @@ package repositories
 import (
 	"ToDo/models"
 	"context"
-	"time"
-
 	"github.com/jinzhu/gorm"
+	"time"
 )
 
 // TodoRepository 待办任务仓库接口
@@ -30,8 +29,9 @@ func NewTodoRepository(db *gorm.DB) TodoRepository {
 
 // CreateTodo 创建待办任务
 func (r *todoRepository) CreateTodo(ctx context.Context, todo *models.Todo) (*models.Todo, error) {
-	if todo.UpdatedAt.IsZero() {
-		todo.UpdatedAt = time.Now() // 默认使用当前时间
+	if todo.UpdatedAt == "" {
+		// 如果没有设置UpdatedAt，可以选择赋一个空字符串，或者留为NULL
+		todo.UpdatedAt = "" // 空字符串表示无更新
 	}
 
 	// 保存 todo 到数据库
@@ -77,8 +77,13 @@ func (r *todoRepository) GetTodoByTitle(ctx context.Context, title string) (*mod
 	return &todo, nil
 }
 
-// UpdateTodoStatus 更新待办任务状态
 func (r *todoRepository) UpdateTodoStatus(ctx context.Context, todo *models.Todo) error {
+	// 更新任务状态时，同时更新updated_at
+	if todo.UpdatedAt == "" {
+		// 如果没有提供UpdatedAt，可以设置为空字符串或当前时间的字符串表示
+		todo.UpdatedAt = time.Now().Format("2006-01-02 15:04:05") // 设置为当前时间字符串
+	}
+
 	// 更新任务
 	if err := r.db.Save(todo).Error; err != nil {
 		return err

@@ -153,6 +153,9 @@ func main() {
 	r.GET("/community/post/likes", func(c *gin.Context) {
 		controllers.GetLikesCount(c.Writer, c.Request, communityService)
 	})
+	r.POST("/check-like-status", func(c *gin.Context) {
+		controllers.CheckLikeStatus(c.Writer, c.Request, communityService)
+	})
 	r.POST("/comment", func(c *gin.Context) {
 		controllers.CreateComment(c.Writer, c.Request, communityService)
 	})
