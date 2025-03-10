@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
+	"time"
 )
 
 type CommunityService struct {
@@ -175,15 +176,24 @@ func (s CommunityService) GetUserByID(ctx context.Context, userID string) (*mode
 	return user, nil
 }
 
-// 这个函数返回一个创建的评论对象和可能的错误
-func (s CommunityService) CreateCommentService(ctx context.Context, comment models.Comment) (*models.Comment, error) {
-	// 假设此处有评论创建的逻辑
+func (s CommunityService) CreateCommentService(ctx context.Context, comment models.Comment) (*models.Comment, string, string, error) {
+	// 设置评论的创建时间
+	comment.CreatedAt = time.Now()
+
+	// 调用仓库层创建评论
 	createdComment, err := s.Repo.CreateComment(ctx, &comment)
 	if err != nil {
-		return nil, err
+		return nil, "", "", err
 	}
 
-	return createdComment, nil
+	// 在 Service 层获取用户信息（用户名和头像 URL）
+	user, err := s.GetUserByID(ctx, createdComment.UserID)
+	if err != nil {
+		return nil, "", "", err
+	}
+
+	// 返回评论信息以及用户的头像和用户名
+	return createdComment, user.Username, user.AvatarURL, nil
 }
 
 // DeleteCommentService 删除评论并更新评论数
