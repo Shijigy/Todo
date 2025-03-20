@@ -76,16 +76,27 @@ func CreateTodo(w http.ResponseWriter, r *http.Request, todoService services.Tod
 	json.NewEncoder(w).Encode(models.Response{Message: "Todo created successfully", Data: createdTodo})
 }
 
+// GetTodos 获取指定用户和日期范围内的任务
 func GetTodos(w http.ResponseWriter, r *http.Request, todoService services.TodoService) {
-	// 获取查询参数
-	userID := r.URL.Query().Get("user_id")
-	updatedAtStr := r.URL.Query().Get("updated_at") // 接收更新日期
+	// 从请求体中解析 JSON 数据
+	var requestData struct {
+		UserID    string `json:"user_id"`
+		UpdatedAt string `json:"updated_at"` // 接收更新日期
+	}
+
+	// 解析请求体
+	err := json.NewDecoder(r.Body).Decode(&requestData)
+	if err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(models.Response{Error: "Invalid request body"})
+		return
+	}
 
 	// 解析 updated_at 字符串为 time.Time，并只获取到日期部分
 	var updatedAt time.Time
-	var err error
-	if updatedAtStr != "" {
-		updatedAt, err = time.Parse("2006-01-02", updatedAtStr) // 仅解析到日期，忽略时间部分
+	if requestData.UpdatedAt != "" {
+		updatedAt, err = time.Parse("2006-01-02", requestData.UpdatedAt) // 解析到日期
 		if err != nil {
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusBadRequest)
@@ -101,7 +112,7 @@ func GetTodos(w http.ResponseWriter, r *http.Request, todoService services.TodoS
 
 	// 传递 context 到服务层
 	ctx := r.Context()
-	todos, err := todoService.GetTodosService(ctx, userID, updatedAtFormatted)
+	todos, err := todoService.GetTodosService(ctx, requestData.UserID, updatedAtFormatted)
 	if err != nil {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusInternalServerError)
@@ -109,9 +120,10 @@ func GetTodos(w http.ResponseWriter, r *http.Request, todoService services.TodoS
 		return
 	}
 
+	// 返回任务列表
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(models.Response{Message: "Tasks retrieved successfully", Data: todos})
+	json.NewEncoder(w).Encode(todos)
 }
 
 // UpdateTodo 更新待办任务

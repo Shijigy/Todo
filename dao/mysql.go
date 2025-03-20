@@ -20,6 +20,7 @@ type Config struct {
 		Username string `yaml:"username"`
 		Password string `yaml:"password"`
 		Dbname   string `yaml:"dbname"`
+		Charset  string `yaml:"charset"`
 	} `yaml:"database"`
 }
 
@@ -27,10 +28,12 @@ var config Config
 
 // LoadConfig 读取配置文件
 func LoadConfig() error {
+	// 读取配置文件
 	data, err := ioutil.ReadFile("./config/config.yaml")
 	if err != nil {
 		return fmt.Errorf("无法读取配置文件: %v", err)
 	}
+	// 解析配置文件
 	if err := yaml.Unmarshal(data, &config); err != nil {
 		return fmt.Errorf("无法解析配置文件: %v", err)
 	}
@@ -44,13 +47,14 @@ func InitMySQL() (err error) {
 		return err
 	}
 
-	// 数据库连接字符串
-	dsn := fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?charset=utf8mb4&parseTime=True&loc=Local",
+	// 拼接数据库连接字符串
+	dsn := fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?charset=%s&parseTime=True&loc=Local",
 		config.Database.Username,
 		config.Database.Password,
 		config.Database.Host,
 		config.Database.Port,
 		config.Database.Dbname,
+		config.Database.Charset,
 	)
 
 	// 连接数据库

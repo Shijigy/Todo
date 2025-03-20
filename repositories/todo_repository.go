@@ -4,7 +4,6 @@ import (
 	"ToDo/models"
 	"context"
 	"github.com/jinzhu/gorm"
-	"time"
 )
 
 // TodoRepository 待办任务仓库接口
@@ -81,7 +80,7 @@ func (r *todoRepository) UpdateTodoStatus(ctx context.Context, todo *models.Todo
 	// 更新任务状态时，同时更新updated_at
 	if todo.UpdatedAt == "" {
 		// 如果没有提供UpdatedAt，可以设置为空字符串或当前时间的字符串表示
-		todo.UpdatedAt = time.Now().Format("2006-01-02 15:04:05") // 设置为当前时间字符串
+		// todo.UpdatedAt = time.Now().Format("2006-01-02 15:04:05") // 设置为当前时间字符串
 	}
 
 	// 更新任务

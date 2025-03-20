@@ -49,18 +49,6 @@ CREATE TABLE `likes` (
                          FOREIGN KEY (`post_id`) REFERENCES `community_posts`(`id`) ON DELETE CASCADE  -- 外键约束
 );
 
-CREATE TABLE `checkins` (
-                            `id` INT AUTO_INCREMENT PRIMARY KEY,               -- 自增主键
-                            `user_id` INT NOT NULL,                             -- 用户 ID，保持 INT 类型
-                            `title` VARCHAR(255) NOT NULL,                       -- 打卡标题
-                            `checkin_at` DATETIME NOT NULL,                     -- 打卡时间，使用 DATETIME 类型
-                            `status` VARCHAR(20) NOT NULL,                       -- 打卡状态，最大长度为 20
-                            `checkin_count` INT DEFAULT 1,                       -- 打卡次数，默认为 1
-                            `target_checkin_count` INT,                          -- 目标打卡次数，添加该字段
-                            `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,    -- 创建时间，默认当前时间
-                            `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP, -- 更新时间，自动更新
-                            FOREIGN KEY (`user_id`) REFERENCES `users`(`id`)     -- 外键关联到用户表的 id 字段
-);
 
 CREATE TABLE `comments` (
                             `id` INT AUTO_INCREMENT PRIMARY KEY,                  -- 评论的唯一 ID
@@ -71,3 +59,19 @@ CREATE TABLE `comments` (
                             FOREIGN KEY (`post_id`) REFERENCES `community_posts`(`id`) ON DELETE CASCADE, -- 关联到动态表
                             FOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ON DELETE CASCADE             -- 关联到用户表
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE checkins (
+                          id INT AUTO_INCREMENT PRIMARY KEY,                -- 自增主键
+                          user_id INT NOT NULL,                             -- 用户 ID，保持 INT 类型
+                          title VARCHAR(255) NOT NULL,       -- 打卡标题
+                          start_date DATE NOT NULL,
+                          end_date DATE NOT NULL,
+                          checkin_count JSON NOT NULL,                      -- 每天的打卡次数（JSON 格式）
+                          target_checkin_count INT,                         -- 目标打卡次数，添加该字段
+                          icon INT,                                         -- 图标
+                          motivation_message VARCHAR(255),                  -- 鼓励语
+                          FOREIGN KEY (user_id) REFERENCES users(id)       -- 外键关联到用户表的 id 字段
+);
+
+
+

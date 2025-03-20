@@ -97,7 +97,7 @@ func main() {
 		controllers.CreateTodo(c.Writer, c.Request, todoService)
 	})
 	// 获取所有任务
-	r.GET("/get-todo", func(c *gin.Context) {
+	r.POST("/get-todo", func(c *gin.Context) {
 		controllers.GetTodos(c.Writer, c.Request, todoService)
 	})
 
@@ -118,17 +118,29 @@ func main() {
 	r.POST("/checkin", func(c *gin.Context) {
 		controllers.Checkin(c.Writer, c.Request, checkinService)
 	})
+	r.GET("/get-checkinsByUserAndDate", func(c *gin.Context) {
+		controllers.GetCheckinsByUserAndDate(c.Writer, c.Request, checkinService)
+	})
 	r.GET("/get-checkin", func(c *gin.Context) {
-		controllers.GetCheckinRecordByUserID(c.Writer, c.Request, checkinService)
+		controllers.GetCheckinRecordByID(c.Writer, c.Request, checkinService)
 	})
-	r.PUT("/checkin/complete", func(c *gin.Context) {
-		controllers.MarkCheckinComplete(c.Writer, c.Request, checkinService)
+	r.POST("/IncrementCheckinCount", func(c *gin.Context) {
+		controllers.IncrementCheckinCount(c.Writer, c.Request, checkinService)
 	})
-	r.PUT("/checkin/update-count", func(c *gin.Context) {
-		controllers.UpdateCheckinCount(c.Writer, c.Request, checkinService)
+	r.POST("/CheckinCompletion", func(c *gin.Context) {
+		controllers.CheckinCompleted(c.Writer, c.Request, checkinService)
+	})
+	r.POST("/checkin/update", func(c *gin.Context) {
+		controllers.UpdateCheckin(c.Writer, c.Request, checkinService)
+	})
+	r.POST("/checkin/complete", func(c *gin.Context) {
+		controllers.MarkCheckinCompleted(c.Writer, c.Request, checkinService)
 	})
 	r.DELETE("/checkin/delete", func(c *gin.Context) {
-		controllers.DeleteCheckin(c.Writer, c.Request, checkinService)
+		controllers.DeleteCheckin(c, checkinService)
+	})
+	r.POST("/checkin/resetCount", func(c *gin.Context) {
+		controllers.ResetCheckinCount(c.Writer, c.Request, checkinService)
 	})
 
 	// 社区动态路由

@@ -20,5 +20,5 @@ type Todo struct {
 	Status      string    `json:"status" bson:"status"`
 	UserID      string    `json:"user_id" bson:"user_id"`
 	CreatedAt   time.Time `json:"created_at" bson:"created_at"`
-	UpdatedAt   string    `json:"updated_at" bson:"updated_at"` // 使用指针类型
+	UpdatedAt   string    `json:"updated_at" bson:"updated_at"`
 }

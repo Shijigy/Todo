@@ -4,6 +4,7 @@ database:
   username: root
   password: SHANG6688
   dbname: todo
+  charset: utf8mb4
 email:
   host: smtp.163.com
   port: 465

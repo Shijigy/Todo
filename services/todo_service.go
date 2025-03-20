@@ -5,6 +5,7 @@ import (
 	"ToDo/repositories"
 	"context"
 	"errors"
+	"fmt"
 	"sync"
 	"time"
 )
@@ -47,6 +48,7 @@ func (s *TodoService) CreateTodoService(ctx context.Context, todo models.Todo) (
 	return createdTodo, nil
 }
 
+// GetTodosService 获取用户的任务列表，并根据日期进行过滤
 func (s *TodoService) GetTodosService(ctx context.Context, userID string, updatedAt string) ([]models.Todo, error) {
 	// 获取所有任务
 	todos, err := s.Repo.GetAllTodos(ctx)
@@ -57,25 +59,18 @@ func (s *TodoService) GetTodosService(ctx context.Context, userID string, update
 	// 根据 user_id 和 updated_at 过滤任务
 	var filteredTodos []models.Todo
 	for _, todo := range todos {
-		if todo.UserID == userID && (updatedAt == "" || todo.UpdatedAt > updatedAt) {
-			filteredTodos = append(filteredTodos, todo)
+		// 判断 userID 是否匹配
+		if todo.UserID == userID {
+			// 只要满足以下条件之一，就将任务加入到结果
+			if updatedAt == "" || todo.UpdatedAt == updatedAt /* || todo.Status == "completed" */ {
+				filteredTodos = append(filteredTodos, todo)
+			}
 		}
 	}
+	fmt.Println("UserID:", userID)
+	fmt.Println("UpdatedAt:", updatedAt)
 
 	return filteredTodos, nil
-}
-
-// GetTodoService 根据标题获取待办任务
-func (s *TodoService) GetTodoService(ctx context.Context, title string) (*models.Todo, error) {
-	if title == "" {
-		return nil, errors.New("todo title cannot be empty")
-	}
-
-	todo, err := s.Repo.GetTodoByTitle(ctx, title)
-	if err != nil {
-		return nil, err
-	}
-	return todo, nil
 }
 
 func (s *TodoService) UpdateTodoStatusService(ctx context.Context, id string, todo models.Todo) error {
@@ -159,7 +154,7 @@ func (s *TodoService) MarkTodoAsCompletedService(ctx context.Context, id string)
 	// 更新任务状态为 completed
 	existingTodo.Status = "completed"
 	// 更新时间戳为当前时间字符串
-	existingTodo.UpdatedAt = time.Now().Format("2006-01-02 15:04:05")
+	// existingTodo.UpdatedAt = time.Now().Format("2006-01-02 15:04:05")
 
 	// 保存更新后的任务
 	err = s.Repo.UpdateTodoStatus(ctx, existingTodo)

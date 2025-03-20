@@ -104,10 +104,39 @@ func GetPosts(w http.ResponseWriter, r *http.Request, service services.Community
 		return
 	}
 
+	// 处理用户信息并返回数据
+	var responsePosts []map[string]interface{}
+	for _, post := range posts {
+		// 获取用户信息
+		user, err := service.GetUserByID(r.Context(), post.UserID)
+		if err != nil {
+			// 如果获取用户信息失败，返回空的用户信息
+			user = &models.User{}
+		}
+
+		// 将用户信息添加到帖子中
+		postData := map[string]interface{}{
+			"id":            post.ID,
+			"user_id":       post.UserID,
+			"content":       post.Content,
+			"image_url":     post.ImageURL,
+			"created_at":    post.CreatedAt,
+			"updated_at":    post.UpdatedAt,
+			"tags":          post.Tags,
+			"likes_count":   post.LikesCount,
+			"comment_count": post.CommentCount,
+			"user_name":     user.Username,  // 用户名
+			"avatar_url":    user.AvatarURL, // 用户头像
+		}
+
+		// 将当前帖子的用户信息和内容返回
+		responsePosts = append(responsePosts, postData)
+	}
+
 	// 成功获取社区帖子，返回 200 状态码和响应数据
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(models.Response{Message: "Posts retrieved successfully", Data: posts})
+	json.NewEncoder(w).Encode(models.Response{Message: "Posts retrieved successfully", Data: responsePosts})
 }
 
 // GetAllPosts 获取所有社区动态
@@ -135,10 +164,39 @@ func GetAllPosts(w http.ResponseWriter, r *http.Request, service services.Commun
 		return
 	}
 
+	// 处理用户信息并返回数据
+	var responsePosts []map[string]interface{}
+	for _, post := range posts {
+		// 获取用户信息
+		user, err := service.GetUserByID(r.Context(), post.UserID)
+		if err != nil {
+			// 如果获取用户信息失败，返回空的用户信息
+			user = &models.User{}
+		}
+
+		// 将用户信息添加到帖子中
+		postData := map[string]interface{}{
+			"id":            post.ID,
+			"user_id":       post.UserID,
+			"content":       post.Content,
+			"image_url":     post.ImageURL,
+			"created_at":    post.CreatedAt,
+			"updated_at":    post.UpdatedAt,
+			"tags":          post.Tags,
+			"likes_count":   post.LikesCount,
+			"comment_count": post.CommentCount,
+			"user_name":     user.Username,  // 用户名
+			"avatar_url":    user.AvatarURL, // 用户头像
+		}
+
+		// 将当前帖子的用户信息和内容返回
+		responsePosts = append(responsePosts, postData)
+	}
+
 	// 成功获取社区帖子，返回 200 状态码和响应数据
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(models.Response{Message: "Posts retrieved successfully", Data: posts})
+	json.NewEncoder(w).Encode(models.Response{Message: "Posts retrieved successfully", Data: responsePosts})
 }
 
 // DeletePost 删除社区动态
