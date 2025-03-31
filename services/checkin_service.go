@@ -12,9 +12,9 @@ import (
 // CheckinService 定义服务接口
 type CheckinService interface {
 	CreateCheckinService(ctx context.Context, checkin models.Checkin) (*models.CheckinWithDecodedCount, error)
-	GetCheckinsByUserIDAndDateService(ctx context.Context, userID string, date string) ([]*models.CheckinWithDecodedCount, error)
+	GetCheckinsByUserIDAndDateService(ctx context.Context, userID string, date string) ([]*models.CheckinWithDecodedCount, map[int]bool, map[int]map[string]int, error)
 	GetCheckinByIDService(ctx context.Context, checkinID int) (*models.CheckinWithDecodedCount, error)
-	IncrementCheckinCountService(ctx context.Context, checkinID int, date string) (*models.Checkin, error)
+	IncrementCheckinCountService(ctx context.Context, checkinID int, date string) (*models.CheckinWithDecodedCount, error)
 	CheckIfCheckinCompleted(ctx context.Context, req models.CheckinCompletionRequest) (bool, error)
 	UpdateCheckinService(ctx context.Context, checkinID int, checkin models.Checkin, startDate time.Time, endDate time.Time) (*models.CheckinWithDecodedCount, error)
 	UpdateCountService(ctx context.Context, checkinID int, checkin models.Checkin, startDate string, endDate string, updatedCheckinCount []byte) error
@@ -83,33 +83,96 @@ func (s checkinService) CreateCheckinService(ctx context.Context, checkin models
 	return result, nil
 }
 
-// GetCheckinsByUserIDAndDateService 获取指定用户指定日期范围的打卡记录
-func (s checkinService) GetCheckinsByUserIDAndDateService(ctx context.Context, userID string, date string) ([]*models.CheckinWithDecodedCount, error) {
-	// 查询数据库，获取指定用户指定日期范围的打卡记录
+// GetCheckinsByUserIDAndDateService 获取指定用户指定日期的打卡记录
+/*func (s checkinService) GetCheckinsByUserIDAndDateService(ctx context.Context, userID string, date string) ([]*models.CheckinWithDecodedCount, error) {
+	// 查询数据库
 	checkins, err := s.repo.GetCheckinsByUserIDAndDate(ctx, userID, date)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get checkins by user_id and date: %v", err)
+		return nil, fmt.Errorf("failed to get checkins: %v", err)
 	}
 
-	var result []*models.CheckinWithDecodedCount
+	// 打印 checkins
+	fmt.Printf("checkins: %+v\n", checkins)
 
-	// 遍历每个打卡记录
+	// 去重处理
+	seenIDs := make(map[int]bool)
+	uniqueCheckins := []*models.Checkin{}
 	for _, checkin := range checkins {
-		// 解码 CheckinCount 字段的 JSON 字符串为 map[string]int
+		if !seenIDs[checkin.ID] {
+			seenIDs[checkin.ID] = true
+			uniqueCheckins = append(uniqueCheckins, &checkin)
+		}
+	}
+
+	// 打印 seenIDs
+	fmt.Printf("seenIDs: %+v\n", seenIDs)
+
+	// 解码并构建结果
+	var result []*models.CheckinWithDecodedCount
+	for _, checkin := range uniqueCheckins {
 		var decodedCount map[string]int
-		err := json.Unmarshal(checkin.CheckinCount, &decodedCount)
-		if err != nil {
-			return nil, fmt.Errorf("failed to decode checkin_count for checkin ID %d: %v", checkin.ID, err)
+		if err := json.Unmarshal(checkin.CheckinCount, &decodedCount); err != nil {
+			return nil, fmt.Errorf("failed to decode checkin_count for ID %d: %v", checkin.ID, err)
 		}
 
-		// 创建返回的结构体，包含原始 Checkin 和解码后的数据
+		// 打印 decodedCount
+		fmt.Printf("decodedCount for checkin ID %d: %+v\n", checkin.ID, decodedCount)
+
 		result = append(result, &models.CheckinWithDecodedCount{
-			Checkin:        &checkin,     // 返回原始的 Checkin 结构体
-			DecodedCheckin: decodedCount, // 返回解码后的 CheckinCount 数据
+			Checkin:        checkin,
+			DecodedCheckin: decodedCount,
 		})
 	}
 
 	return result, nil
+}
+*/
+
+// GetCheckinsByUserIDAndDateService 获取指定用户指定日期的打卡记录
+func (s checkinService) GetCheckinsByUserIDAndDateService(ctx context.Context, userID string, date string) ([]*models.CheckinWithDecodedCount, map[int]bool, map[int]map[string]int, error) {
+	// 查询数据库
+	checkins, err := s.repo.GetCheckinsByUserIDAndDate(ctx, userID, date)
+	if err != nil {
+		return nil, nil, nil, fmt.Errorf("failed to get checkins: %v", err)
+	}
+
+	// 打印 checkins
+	fmt.Printf("checkins: %+v\n", checkins)
+
+	// 去重处理
+	seenIDs := make(map[int]bool)
+	uniqueCheckins := []*models.Checkin{}
+	for _, checkin := range checkins {
+		if !seenIDs[checkin.ID] {
+			seenIDs[checkin.ID] = true
+			uniqueCheckins = append(uniqueCheckins, &checkin)
+		}
+	}
+
+	// 打印 seenIDs
+	fmt.Printf("seenIDs: %+v\n", seenIDs)
+
+	// 解码并构建结果
+	var result []*models.CheckinWithDecodedCount
+	decodedCounts := make(map[int]map[string]int) // 用来存储每个 checkin 的解码结果
+	for _, checkin := range uniqueCheckins {
+		var decodedCount map[string]int
+		if err := json.Unmarshal(checkin.CheckinCount, &decodedCount); err != nil {
+			return nil, nil, nil, fmt.Errorf("failed to decode checkin_count for ID %d: %v", checkin.ID, err)
+		}
+
+		// 打印 decodedCount
+		fmt.Printf("decodedCount for checkin ID %d: %+v\n", checkin.ID, decodedCount)
+
+		decodedCounts[checkin.ID] = decodedCount // 存储解码后的数据
+
+		result = append(result, &models.CheckinWithDecodedCount{
+			Checkin:        checkin,
+			DecodedCheckin: decodedCount,
+		})
+	}
+
+	return result, seenIDs, decodedCounts, nil
 }
 
 func (s checkinService) GetCheckinByIDService(ctx context.Context, checkinID int) (*models.CheckinWithDecodedCount, error) {
@@ -162,7 +225,7 @@ func (s checkinService) CheckIfCheckinCompleted(ctx context.Context, req models.
 }
 
 // IncrementCheckinCountService 增加指定日期的打卡次数
-func (s *checkinService) IncrementCheckinCountService(ctx context.Context, checkinID int, date string) (*models.Checkin, error) {
+func (s *checkinService) IncrementCheckinCountService(ctx context.Context, checkinID int, date string) (*models.CheckinWithDecodedCount, error) {
 	// 调用 repository 层的增量更新打卡次数
 	checkin, err := s.repo.IncrementCheckinCount(ctx, checkinID, date)
 	if err != nil {

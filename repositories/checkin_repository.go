@@ -14,7 +14,7 @@ type CheckinRepository interface {
 	CreateCheckin(ctx context.Context, checkin *models.Checkin, checkinCountJSON []byte) error
 	GetCheckinsByUserIDAndDate(ctx context.Context, userID string, date string) ([]models.Checkin, error)
 	GetCheckinByID(ctx context.Context, checkinID int) (*models.Checkin, error)
-	IncrementCheckinCount(ctx context.Context, checkinID int, date string) (*models.Checkin, error)
+	IncrementCheckinCount(ctx context.Context, checkinID int, date string) (*models.CheckinWithDecodedCount, error)
 	UpdateCheckin(ctx context.Context, checkin *models.Checkin) error
 	UpdateCount(ctx context.Context, checkinID int, updatedCheckinCount []byte) error
 	DeleteCheckin(ctx context.Context, checkinID int) error
@@ -81,13 +81,13 @@ func (r *checkinRepository) GetCheckinsByUserIDAndDate(ctx context.Context, user
 		       icon, 
 		       motivation_message
 		FROM checkins
-		WHERE user_id = ? AND JSON_CONTAINS(checkin_count, ?) = 1
+		WHERE user_id = ? 
+		  AND start_date <= ? 
+		  AND end_date >= ?
 	`
-	var checkinCountQuery string
-	checkinCountQuery = `{"` + date + `": 0}` // 拼接 JSON 字符串进行查询
 
-	// 执行查询
-	rows, err := r.db.Raw(query, userID, checkinCountQuery).Rows()
+	// 执行查询，使用日期范围过滤
+	rows, err := r.db.Raw(query, userID, date, date).Rows()
 	if err != nil {
 		return nil, err
 	}
@@ -109,7 +109,6 @@ func (r *checkinRepository) GetCheckinsByUserIDAndDate(ctx context.Context, user
 		}
 
 		// 将解析后的 checkinCount 存回 []byte
-		// 需要把 map[string]int 再转换成 []byte
 		checkinCountBytes, err := json.Marshal(checkinCount)
 		if err != nil {
 			return nil, err
@@ -187,7 +186,7 @@ func (r *checkinRepository) GetCheckinByID(ctx context.Context, checkinID int) (
 	return &checkin, nil
 }
 
-func (r *checkinRepository) IncrementCheckinCount(ctx context.Context, checkinID int, date string) (*models.Checkin, error) {
+func (r *checkinRepository) IncrementCheckinCount(ctx context.Context, checkinID int, date string) (*models.CheckinWithDecodedCount, error) {
 	var checkin models.Checkin
 
 	// 查询数据库中指定 checkin_id 的打卡记录
@@ -254,8 +253,11 @@ func (r *checkinRepository) IncrementCheckinCount(ctx context.Context, checkinID
 	// 将更新后的 checkin_count 返回到结构体
 	checkin.CheckinCount = updatedCheckinCountJSON
 
-	// 返回更新后的打卡记录
-	return &checkin, nil
+	// 返回包含解码后的 Checkin 和解码后的 checkin_count 的结构体
+	return &models.CheckinWithDecodedCount{
+		Checkin:        &checkin,
+		DecodedCheckin: checkinCount,
+	}, nil
 }
 
 // UpdateCheckin 更新打卡记录到数据库

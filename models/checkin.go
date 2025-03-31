@@ -24,3 +24,10 @@ type CheckinCompletionRequest struct {
 	CheckinID int    `json:"checkin_id"`
 	Date      string `json:"date"`
 }
+
+// CheckinResponse 是服务层返回的数据结构，包含 checkins、seenIDs 和 decodedCount
+type CheckinResponse struct {
+	Checkins     []*CheckinWithDecodedCount `json:"checkins"`
+	SeenIDs      map[int]bool               `json:"seen_ids"`
+	DecodedCount []*CheckinWithDecodedCount `json:"decoded_count"`
+}

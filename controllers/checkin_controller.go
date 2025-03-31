@@ -87,7 +87,7 @@ func Checkin(w http.ResponseWriter, r *http.Request, service services.CheckinSer
 }
 
 // GetCheckinsByUserAndDate 获取指定用户指定日期的打卡记录
-func GetCheckinsByUserAndDate(w http.ResponseWriter, r *http.Request, service services.CheckinService) {
+/*func GetCheckinsByUserAndDate(w http.ResponseWriter, r *http.Request, service services.CheckinService) {
 	// 从请求参数中获取 user_id 和 date
 	userID := r.URL.Query().Get("user_id")
 	date := r.URL.Query().Get("date")
@@ -113,6 +113,47 @@ func GetCheckinsByUserAndDate(w http.ResponseWriter, r *http.Request, service se
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(models.Response{Message: "Checkins retrieved successfully", Data: checkins})
+}
+*/
+// GetCheckinsByUserAndDate 获取指定用户指定日期的打卡记录
+func GetCheckinsByUserAndDate(w http.ResponseWriter, r *http.Request, service services.CheckinService) {
+	// 从请求参数中获取 user_id 和 date
+	userID := r.URL.Query().Get("user_id")
+	date := r.URL.Query().Get("date")
+
+	// 校验参数
+	if userID == "" || date == "" {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(models.Response{Error: "Missing user_id or date"})
+		return
+	}
+
+	// 调用服务层获取指定用户指定日期的打卡记录
+	checkins, seenIDs, decodedCounts, err := service.GetCheckinsByUserIDAndDateService(r.Context(), userID, date)
+	if err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(models.Response{Error: err.Error()})
+		return
+	}
+
+	// 打印日志
+	fmt.Printf("Returned checkins: %+v\n", checkins)
+	fmt.Printf("Returned seenIDs: %+v\n", seenIDs)
+	fmt.Printf("Returned decodedCounts: %+v\n", decodedCounts)
+
+	// 返回打卡记录，包含 seenIDs 和 decodedCounts
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(models.Response{
+		Message: "Checkins retrieved successfully",
+		Data: map[string]interface{}{
+			"checkins":      checkins,
+			"seenIDs":       seenIDs,
+			"decodedCounts": decodedCounts,
+		},
+	})
 }
 
 func GetCheckinRecordByID(w http.ResponseWriter, r *http.Request, service services.CheckinService) {
